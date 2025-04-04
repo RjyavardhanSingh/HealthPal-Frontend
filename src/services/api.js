@@ -488,10 +488,8 @@ const api = {
   },
   
   video: {
-    getToken: (channelName, uid, role) => 
-      instance.post('/video/token', { channelName, uid, role }),
-    getCallDetails: (appointmentId) => 
-      instance.get(`/video/call/${appointmentId}`)
+    getToken: (data) => instance.post('/video/token', data),
+    getCallDetails: (appointmentId) => instance.get(`/video/call/${appointmentId}`)
   },
   
   reminders: {

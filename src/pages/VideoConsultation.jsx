@@ -50,8 +50,6 @@ const VideoConsultation = () => {
         setError(null);
         
         console.log('Fetching appointment details for video call, ID:', id);
-        
-        // First fetch the appointment details
         const appointmentResponse = await api.appointments.getById(id);
         setAppointment(appointmentResponse.data.data);
         
@@ -59,80 +57,71 @@ const VideoConsultation = () => {
         const agoraService = await import('../services/agoraService').then(m => m.default);
         
         try {
+          // Generate proper channel name
+          const channelName = `healthpal_${id}`;
+          console.log(`Using channel name: ${channelName}`);
+          
           // Add error handling around token request
-          const tokenResponse = await api.video.getToken(id);
-          console.log('Video token received:', tokenResponse.data);
+          console.log('Requesting Agora token');
+          const tokenResponse = await api.video.getToken({
+            channelName,
+            uid: 0,
+            role: 'publisher'
+          });
+          
+          console.log('Token response:', tokenResponse.data);
           
           if (tokenResponse?.data?.token) {
-            const { token, channelName } = tokenResponse.data;
+            const { token } = tokenResponse.data;
             
             // Join the channel with the token
-            await agoraService.joinChannel(
+            console.log('Joining channel with token');
+            const localUser = await agoraService.joinChannel(
               channelName, 
               token, 
               null,
-              // Rest of the join channel parameters
+              (user) => {
+                console.log('Remote user joined with video', user);
+                setConnected(true);
+              },
+              (user) => {
+                console.log('Remote user left', user);
+              }
             );
-          } else {
-            // Fallback for missing token data
-            console.log('Creating temporary channel without token');
-            const channelName = `appointment-${id}`;
-            await agoraService.joinChannel(
-              channelName, 
-              null, 
-              null,
-              // Rest of the join channel parameters
-            );
-          }
-          
-          // Set up local video stream
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          mediaStreamRef.current = stream;
-          setLocalStream(stream);
-          
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-          
-          setConnected(true);
-        } catch (tokenError) {
-          console.error('Token error:', tokenError);
-          // Continue without token in development mode
-          if (process.env.NODE_ENV === 'development') {
-            const channelName = `appointment-${id}`;
+            
+            console.log('Local user initialized:', localUser);
+            
+            // Play local video in container
+            if (localUser && localUser.videoTrack) {
+              console.log('Playing local video track');
+              localUser.videoTrack.play('local-video-container');
+            }
+            
+            // Also set up traditional camera access as fallback
             try {
-              await agoraService.joinChannel(
-                channelName, 
-                null, 
-                null,
-                (user) => {
-                  console.log('Remote user joined with video', user);
-                  if (user.videoTrack) {
-                    user.videoTrack.play(remoteVideoRef.current);
-                  }
-                },
-                (user) => {
-                  console.log('Remote user left', user);
-                }
-              );
+              const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: true 
+              });
               
-              // Set up local video stream
-              const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
               mediaStreamRef.current = stream;
               setLocalStream(stream);
               
+              // If Agora local video doesn't show, we can use this
               if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
               }
               
               setConnected(true);
-            } catch (fallbackError) {
-              console.error('Fallback error:', fallbackError);
-              throw new Error(`Failed to join call: ${fallbackError.message}`);
+            } catch (mediaError) {
+              console.error('Error accessing media devices:', mediaError);
             }
           } else {
-            throw tokenError;
+            throw new Error('Invalid token received from server');
           }
+        } catch (tokenError) {
+          console.error('Token error:', tokenError);
+          setError(`Failed to initialize video call: ${tokenError.message}`);
         }
       } catch (err) {
         console.error('Error fetching appointment:', err);
@@ -375,7 +364,11 @@ const VideoConsultation = () => {
           {/* Video area */}
           <div className="md:col-span-2">
             <div className="aspect-video bg-gray-800 rounded-lg mb-4 relative overflow-hidden">
-              <div ref={remoteVideoRef} className="w-full h-full">
+              {/* Remote video container - add ID attribute */}
+              <div id="remote-video-container" className="w-full h-full">
+                {/* Assign unique ID for each possible remote user */}
+                <div id="remote-video-0" className="w-full h-full"></div>
+                
                 {!connected && (
                   <div className="text-gray-400 text-center flex flex-col items-center justify-center h-full">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -386,16 +379,10 @@ const VideoConsultation = () => {
                 )}
               </div>
               
-              {/* Picture-in-picture miniature of local view */}
+              {/* Local video miniature - add ID attribute */}
               {localStream && (
                 <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 border-2 border-white rounded overflow-hidden">
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
+                  <div id="local-video-container" className="w-full h-full"></div>
                 </div>
               )}
             </div>
