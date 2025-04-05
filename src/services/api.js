@@ -374,16 +374,17 @@ const api = {
   },
   
   appointments: {
-    getAll: (params) => axios.get('/appointments', { params }),
-    getById: (id) => axios.get(`/appointments/${id}`),
-    create: (data) => axios.post('/appointments', data),
-    update: (id, data) => axios.put(`/appointments/${id}`, data),
-    cancel: (id, reason) => axios.put(`/appointments/${id}/cancel`, { reason }),
-    updateStatus: (id, status) => axios.patch(`/appointments/${id}/status`, { status }),
-    submitReview: (id, data) => axios.post(`/appointments/${id}/review`, data),
-    createByStaff: (data) => axios.post('/appointments/admin', data),
-    getAvailableDates: (doctorId) => axios.get(`/doctors/${doctorId}/available-dates`),
-    getAvailableTimeSlots: (doctorId, date) => axios.get(`/doctors/${doctorId}/available-slots/${date}`)
+    // Use instance instead of axios to ensure auth headers are included
+    getAll: (params) => instance.get('/appointments', { params }),
+    getById: (id) => instance.get(`/appointments/${id}`),
+    create: (data) => instance.post('/appointments', data),
+    update: (id, data) => instance.put(`/appointments/${id}`, data),
+    cancel: (id, reason) => instance.put(`/appointments/${id}/cancel`, { reason }),
+    updateStatus: (id, status) => instance.patch(`/appointments/${id}/status`, { status }),
+    submitReview: (id, data) => instance.post(`/appointments/${id}/review`, data),
+    createByStaff: (data) => instance.post('/appointments/admin', data),
+    getAvailableDates: (doctorId) => instance.get(`/doctors/${doctorId}/available-dates`),
+    getAvailableTimeSlots: (doctorId, date) => instance.get(`/doctors/${doctorId}/available-slots/${date}`)
   },
   
   doctors: {
@@ -447,10 +448,13 @@ const api = {
   },
   
   consultations: {
-    create: (data) => axios.post('/consultations', data),
-    getById: (id) => axios.get(`/consultations/${id}`),
-    getByAppointment: (appointmentId) => axios.get(`/consultations/appointment/${appointmentId}`),
-    update: (id, data) => axios.put(`/consultations/${id}`, data)
+    create: (data) => instance.post('/consultations', data),
+    getById: (id) => instance.get(`/consultations/${id}`),
+    getByAppointment: (appointmentId) => instance.get(`/consultations/appointment/${appointmentId}`),
+    update: (id, data) => instance.put(`/consultations/${id}`, data),
+    
+    // Add this method for doctor's consultations
+    getByPatient: (patientId) => instance.get(`/consultations/patient/${patientId}`)
   },
   
   medicalRecords: {

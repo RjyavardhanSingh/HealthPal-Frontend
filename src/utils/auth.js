@@ -36,3 +36,24 @@ export const isTokenExpired = (token) => {
     return true; // Assume expired if there's an error
   }
 };
+
+// Add this function to help diagnose API reference issues
+export const checkApiConsistency = () => {
+  try {
+    const apiModuleExists = typeof api !== 'undefined';
+    console.log('API module exists globally:', apiModuleExists);
+    
+    if (apiModuleExists) {
+      console.log('API structure:', {
+        hasAuth: typeof api.auth !== 'undefined',
+        hasAppointments: typeof api.appointments !== 'undefined',
+        hasDoctors: typeof api.doctors !== 'undefined'
+      });
+    }
+    
+    return apiModuleExists;
+  } catch (err) {
+    console.error('Error checking API consistency:', err);
+    return false;
+  }
+};
