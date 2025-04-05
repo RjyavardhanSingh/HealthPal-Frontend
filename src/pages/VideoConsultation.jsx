@@ -141,30 +141,42 @@ const VideoConsultation = () => {
                 
                 setConnected(true);
                 
-                // Critical fix: Properly handle remote video track
+                // Fix remote video display
                 if (user.videoTrack) {
-                  console.log('Remote user has video, attempting to play in remote container');
-                  
-                  // Use setTimeout to ensure DOM element is ready
+                  console.log('Playing remote video for user:', user.uid);
+                  // Use setTimeout to ensure DOM is ready
                   setTimeout(() => {
                     try {
-                      const remoteContainer = document.getElementById('remote-video-container');
+                      // Try multiple possible container IDs
+                      const remoteContainer = document.getElementById('remote-video-container') || 
+                                           document.getElementById(`remote-video-${user.uid}`) || 
+                                           document.getElementById('remote-video-0');
+                      
                       if (remoteContainer) {
-                        console.log('Playing remote video in container');
+                        console.log('Found remote container, playing video');
                         user.videoTrack.play(remoteContainer);
                       } else {
-                        console.error('Remote container not found');
+                        console.error('Remote video container not found');
+                        // Fallback: Try to play in any visible container
+                        const fallbackContainer = document.querySelector('.aspect-video');
+                        if (fallbackContainer) {
+                          console.log('Using fallback container for remote video');
+                          user.videoTrack.play(fallbackContainer);
+                        }
                       }
                     } catch (err) {
                       console.error('Error playing remote video:', err);
                     }
-                  }, 1000);
+                  }, 1000); // Increase timeout to ensure DOM is fully ready
                 }
                 
-                // Play remote audio automatically
+                // Make sure audio plays properly too
                 if (user.audioTrack) {
-                  console.log('Playing remote audio');
-                  user.audioTrack.play();
+                  try {
+                    user.audioTrack.play();
+                  } catch (audioErr) {
+                    console.error('Error playing remote audio:', audioErr);
+                  }
                 }
               },
               (user) => {
@@ -515,6 +527,7 @@ const VideoConsultation = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
           {/* Video area */}
           <div className="md:col-span-2">
+            {/* Remote video container */}
             <div className="aspect-video bg-gray-800 rounded-lg mb-4 relative overflow-hidden">
               {/* Remote video container with multiple IDs for redundancy */}
               <div id="remote-video-container" className="w-full h-full">
@@ -542,14 +555,6 @@ const VideoConsultation = () => {
                   ></video>
                 </div>
               </div>
-              {!localStream && (
-                <button
-                  onClick={() => initializeMedia()}
-                  className="absolute bottom-2 left-2 bg-blue-600 text-white px-2 py-1 text-xs rounded"
-                >
-                  Retry Camera
-                </button>
-              )}
             </div>
             
             <div className="bg-gray-100 p-4 rounded-lg">
