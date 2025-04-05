@@ -10,6 +10,7 @@ class AgoraService {
     this.appId = import.meta.env.VITE_AGORA_APP_ID || '1d367e44c9bc45ff8903ebc0e679ccec';
     this.isJoining = false;
     this.eventsInitialized = false;
+    this.channelJoined = false;
   }
 
   async initialize() {
@@ -90,54 +91,54 @@ class AgoraService {
     );
   }
 
-  async joinChannel(channelName, token, uid = null, onUserJoined, onUserLeft) {
+  resetClient() {
+    if (this.client) {
+      // Remove all existing event listeners
+      this.client.removeAllListeners();
+      
+      // Leave channel if already in one
+      if (this.channelJoined) {
+        return this.leaveChannel();
+      }
+    }
+    return Promise.resolve();
+  }
+
+  async joinChannel(channelName, token, uid = 0) {
     try {
       if (!this.client) {
         await this.initialize();
       }
       
-      // Set up event handlers for remote users
-      this.client.on('user-published', async (user, mediaType) => {
-        console.log(`User ${user.uid} published ${mediaType} track`);
-        
-        // Subscribe to the remote user
-        await this.client.subscribe(user, mediaType);
-        console.log(`Subscribed to ${mediaType} track of user ${user.uid}`);
-        
-        // Call the callback to handle the user joining
-        if (onUserJoined && typeof onUserJoined === 'function') {
-          onUserJoined(user);
-        }
-      });
-      
-      this.client.on('user-unpublished', (user, mediaType) => {
-        console.log(`User ${user.uid} unpublished ${mediaType} track`);
-      });
-      
-      this.client.on('user-left', (user) => {
-        console.log(`User ${user.uid} left the channel`);
-        if (onUserLeft && typeof onUserLeft === 'function') {
-          onUserLeft(user);
-        }
-      });
-      
       // Join the channel
-      const userId = uid || 0; // Use 0 for dynamic assignment
-      await this.client.join(this.appId, channelName, token, userId);
+      await this.client.join(this.appId, channelName, token, uid);
       console.log('Successfully joined channel:', channelName);
+      this.channelJoined = true;
       
-      // Create and publish tracks
-      const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
-      this.localTracks = { audioTrack: microphoneTrack, videoTrack: cameraTrack };
+      // Create local tracks
+      const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        {}, 
+        {
+          encoderConfig: {
+            width: 640,
+            height: 480,
+            frameRate: 30,
+            bitrateMin: 400,
+            bitrateMax: 1000
+          }
+        }
+      );
       
-      await this.client.publish(Object.values(this.localTracks));
-      console.log('Published local tracks');
-      
-      return {
-        uid: this.client.uid,
+      this.localTracks = {
         audioTrack: microphoneTrack,
         videoTrack: cameraTrack
       };
+      
+      // Publish tracks
+      await this.client.publish([microphoneTrack, cameraTrack]);
+      console.log('Published local tracks to channel');
+      
+      return this.localTracks;
     } catch (error) {
       console.error('Error joining channel:', error);
       throw error;
@@ -167,6 +168,7 @@ class AgoraService {
       this.remoteUsers = {};
       this.localAudioTrack = null;
       this.localVideoTrack = null;
+      this.channelJoined = false;
       
       return true;
     } catch (error) {
@@ -175,22 +177,23 @@ class AgoraService {
     }
   }
 
-  toggleMute() {
-    if (this.localAudioTrack) {
-      const muted = !this.localAudioTrack.muted;
-      this.localAudioTrack.setMuted(muted);
-      return muted;
+  toggleVideo() {
+    if (this.localTracks && this.localTracks.videoTrack) {
+      if (this.localTracks.videoTrack.isPlaying) {
+        this.localTracks.videoTrack.stop();
+        this.localTracks.videoTrack.close();
+        this.localTracks.videoTrack.isPlaying = false;
+      } else {
+        this.localTracks.videoTrack.play('local-video-container');
+        this.localTracks.videoTrack.isPlaying = true;
+      }
     }
-    return false;
   }
 
-  toggleVideo() {
-    if (this.localVideoTrack) {
-      const disabled = !this.localVideoTrack.muted;
-      this.localVideoTrack.setMuted(disabled);
-      return disabled;
+  toggleMute() {
+    if (this.localTracks && this.localTracks.audioTrack) {
+      this.localTracks.audioTrack.setMuted(!this.localTracks.audioTrack.muted);
     }
-    return false;
   }
 }
 
