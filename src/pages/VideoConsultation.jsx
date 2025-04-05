@@ -248,32 +248,54 @@ const VideoConsultation = () => {
 
   // Toggle camera on/off
   const toggleCamera = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getVideoTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsCameraOn(!isCameraOn);
+    let newState = !isCameraOn;
+    
+    // Try to toggle Agora video first
+    if (agoraServiceRef.current) {
+      try {
+        const result = agoraServiceRef.current.toggleVideo();
+        if (typeof result === 'boolean') {
+          newState = !result; // Use the result from Agora if available
+        }
+      } catch (err) {
+        console.error('Error toggling Agora video:', err);
+      }
     }
     
-    // Also toggle Agora video if available
-    if (agoraServiceRef.current) {
-      agoraServiceRef.current.toggleVideo();
+    // Also toggle WebRTC video as fallback
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getVideoTracks().forEach(track => {
+        track.enabled = newState;
+      });
     }
+    
+    setIsCameraOn(newState);
   };
 
   // Toggle microphone on/off
   const toggleMic = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = !track.enabled;
-      });
-      setIsMicOn(!isMicOn);
+    let newState = !isMicOn;
+    
+    // Try to toggle Agora audio first
+    if (agoraServiceRef.current) {
+      try {
+        const result = agoraServiceRef.current.toggleAudio();
+        if (typeof result === 'boolean') {
+          newState = !result; // Use the result from Agora if available
+        }
+      } catch (err) {
+        console.error('Error toggling Agora audio:', err);
+      }
     }
     
-    // Also toggle Agora audio if available
-    if (agoraServiceRef.current) {
-      agoraServiceRef.current.toggleMute();
+    // Also toggle WebRTC audio as fallback
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = newState;
+      });
     }
+    
+    setIsMicOn(newState);
   };
 
   // Handle sending messages
@@ -454,6 +476,23 @@ const VideoConsultation = () => {
           <div className="md:col-span-2">
             {/* Remote video container */}
             <div className="aspect-video bg-gray-800 rounded-lg mb-4 relative overflow-hidden">
+              {/* Status indicators */}
+              <div className="absolute top-4 left-4 z-30 flex space-x-2">
+                <div className={`flex items-center px-2 py-1 rounded-full text-xs ${isCameraOn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  {isCameraOn ? 'On' : 'Off'}
+                </div>
+                
+                <div className={`flex items-center px-2 py-1 rounded-full text-xs ${isMicOn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  {isMicOn ? 'On' : 'Off'}
+                </div>
+              </div>
+
               <div id="remote-video-container" className="w-full h-full flex items-center justify-center">
                 {!connected && (
                   <div className="text-gray-400 text-center flex flex-col items-center justify-center absolute inset-0 z-10">
@@ -468,13 +507,7 @@ const VideoConsultation = () => {
               {/* Local video miniature */}
               <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 border-2 border-white rounded overflow-hidden z-20">
                 <div id="local-video-container" className="w-full h-full">
-                  <video 
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  ></video>
+                  {/* No video element here - Agora will create it */}
                 </div>
               </div>
             </div>
@@ -547,11 +580,11 @@ const VideoConsultation = () => {
       </div>
 
       {/* Control buttons */}
-      <div className="fixed bottom-4 left-4 right-4 z-10 flex justify-between">
-        <div className="flex space-x-2">
+      <div className="fixed bottom-4 left-0 right-0 z-10 flex justify-center">
+        <div className="bg-gray-800 bg-opacity-70 rounded-full px-6 py-3 flex space-x-4">
           <button
             onClick={toggleCamera}
-            className={`p-2 rounded-full ${isCameraOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'}`}
+            className={`p-3 rounded-full ${isCameraOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'} transition-all duration-200 flex items-center justify-center`}
             title={isCameraOn ? "Turn Off Camera" : "Turn On Camera"}
           >
             {isCameraOn ? (
@@ -564,9 +597,10 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
+          
           <button
             onClick={toggleMic}
-            className={`p-2 rounded-full ${isMicOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'}`}
+            className={`p-3 rounded-full ${isMicOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'} transition-all duration-200 flex items-center justify-center`}
             title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
           >
             {isMicOn ? (
@@ -580,17 +614,28 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
-        </div>
-        
-        <div className="flex space-x-2">
+          
           {currentUser.role === 'doctor' && (
             <button
               onClick={() => setShowPrescriptionModal(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+              className="bg-green-600 text-white p-3 rounded-full hover:bg-green-700 transition-all duration-200 flex items-center justify-center"
+              title="Write Prescription"
             >
-              Write Prescription
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </button>
           )}
+          
+          <button
+            onClick={handleEndConsultation}
+            className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 transition-all duration-200 flex items-center justify-center"
+            title="End Consultation"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
+            </svg>
+          </button>
         </div>
       </div>
 
