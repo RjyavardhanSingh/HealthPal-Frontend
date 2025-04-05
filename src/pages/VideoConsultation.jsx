@@ -345,26 +345,43 @@ const VideoConsultation = () => {
     if (window.confirm('Are you sure you want to end this consultation?')) {
       try {
         setLoading(true);
-
-        // Clean up video/audio
+        
+        // First clean up video/audio resources
         if (agoraServiceRef.current) {
-          await agoraServiceRef.current.leaveChannel();
+          await agoraServiceRef.current.leaveChannel().catch(err => {
+            console.error('Error leaving Agora channel:', err);
+          });
         }
-
+        
         if (mediaStreamRef.current) {
           mediaStreamRef.current.getTracks().forEach(track => track.stop());
         }
-
-        // If doctor is ending the consultation, mark it as completed
+        
+        // Different flows based on user role
         if (currentUser.role === 'doctor') {
           try {
-            await api.appointments.update(id, { status: 'completed' });
-            console.log('Appointment marked as completed');
-            // Doctors don't need to review patients, so just navigate back
-            navigate('/doctor/appointments');
+            // Create a consultation record first (which is required)
+            const consultationData = {
+              appointmentId: id,
+              symptoms: appointment.reason || 'Video consultation',
+              diagnosis: 'Video consultation completed',
+              notes: 'Consultation conducted via video call',
+              vitalSigns: {},
+              followUpRequired: false
+            };
+            
+            // First create the consultation
+            const consultationResponse = await api.consultations.create(consultationData);
+            console.log('Created consultation:', consultationResponse.data);
+            
+            // Then update the appointment status
+            await api.appointments.updateStatus(id, 'completed');
+            console.log('Updated appointment status to completed');
+            
             toast.success('Consultation completed successfully');
-          } catch (updateErr) {
-            console.error('Error updating appointment status:', updateErr);
+            navigate('/doctor/appointments');
+          } catch (err) {
+            console.error('Error completing consultation:', err);
             toast.error('There was an issue updating the appointment status');
             navigate('/doctor/appointments');
           }
@@ -372,7 +389,6 @@ const VideoConsultation = () => {
           // For patients, show the review dialog
           setShowReviewDialog(true);
         }
-
       } catch (error) {
         console.error('Error ending consultation:', error);
         toast.error('Failed to end consultation properly');
@@ -385,7 +401,7 @@ const VideoConsultation = () => {
   // Review dialog closing handler
   const handleReviewClose = (reviewed) => {
     setShowReviewDialog(false);
-
+    
     // Navigate back to appointments page
     navigate('/appointments');
     
