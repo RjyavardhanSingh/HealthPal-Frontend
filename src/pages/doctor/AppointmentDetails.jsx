@@ -254,6 +254,26 @@ const AppointmentDetails = () => {
           )}
         </div>
       </div>
+
+      {appointment.status === 'scheduled' && new Date(appointment.date) < new Date() && (
+        <div className="mt-4 py-4 px-4 bg-amber-50 border border-amber-200 rounded-md">
+          <p className="text-amber-800 mb-3">This appointment date has passed. Please update its status:</p>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => handleUpdateStatus('completed')}
+              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Mark as Completed
+            </button>
+            <button
+              onClick={() => handleUpdateStatus('no-show')}
+              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Mark as No-show
+            </button>
+          </div>
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>

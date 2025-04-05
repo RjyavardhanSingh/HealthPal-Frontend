@@ -374,7 +374,6 @@ const api = {
   },
   
   appointments: {
-    // Use instance instead of axios to ensure auth headers are included
     getAll: (params) => instance.get('/appointments', { params }),
     getById: (id) => instance.get(`/appointments/${id}`),
     create: (data) => instance.post('/appointments', data),

@@ -385,6 +385,63 @@ const AppointmentDetails = () => {
                   Join Video Consultation
                 </button>
               )}
+
+              {appointment.status === 'scheduled' && new Date(appointment.date) < new Date() && (
+                <div className={`mt-4 ${contentLoaded ? "animate-slide-up stagger-5" : "opacity-0"}`}>
+                  <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-md">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-amber-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-amber-700">
+                          This appointment date has passed. Would you like to mark it as completed?
+                        </p>
+                        <div className="mt-3">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.appointments.updateStatus(id, 'completed');
+                                toast.success('Appointment marked as completed');
+                                
+                                // Refresh appointment data
+                                const response = await api.appointments.getById(id);
+                                setAppointment(response.data.data);
+                              } catch (err) {
+                                console.error('Error updating appointment status:', err);
+                                toast.error('Failed to update appointment status');
+                              }
+                            }}
+                            className="text-amber-700 border border-amber-500 bg-transparent hover:bg-amber-500 hover:text-white px-4 py-2 rounded-md text-sm font-medium transition-colors mr-2"
+                          >
+                            Mark as Completed
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.appointments.cancel(id, 'No response from both parties');
+                                toast.success('Appointment cancelled due to no response');
+                                
+                                // Refresh appointment data
+                                const response = await api.appointments.getById(id);
+                                setAppointment(response.data.data);
+                              } catch (err) {
+                                console.error('Error cancelling appointment:', err);
+                                toast.error('Failed to cancel appointment');
+                              }
+                            }}
+                            className="text-red-700 border border-red-500 bg-transparent hover:bg-red-500 hover:text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                          >
+                            Mark as Cancelled
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

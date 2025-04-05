@@ -33,12 +33,17 @@ const AppointmentManagement = () => {
         switch(filter) {
           case 'upcoming':
             queryParams.status = 'scheduled';
+            queryParams.before = 'false'; // Add this parameter
             break;
           case 'completed':
             queryParams.status = 'completed';
             break;
           case 'missed':
             queryParams.status = 'cancelled,no-show';
+            break;
+          case 'no-response':
+            queryParams.status = 'scheduled';
+            queryParams.before = 'true'; // Add this parameter
             break;
           default:
             break;
@@ -166,6 +171,14 @@ const AppointmentManagement = () => {
             }`}
           >
             Missed/No-show
+          </button>
+          <button
+            onClick={() => setFilter('no-response')}
+            className={`px-3 py-1 rounded ${
+              filter === 'no-response' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100'
+            }`}
+          >
+            No Response
           </button>
         </div>
         

@@ -46,13 +46,20 @@ const AppointmentList = () => {
 
   // Filter appointments based on active tab
   const filteredAppointments = appointments.filter(appointment => {
+    const appointmentDate = new Date(appointment.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isPastAppointment = appointmentDate < today;
+    
     switch (activeTab) {
       case 'upcoming':
-        return appointment.status === 'scheduled';
+        return appointment.status === 'scheduled' && !isPastAppointment;
       case 'completed':
         return appointment.status === 'completed';
       case 'missed':
         return appointment.status === 'no-show' || appointment.status === 'cancelled';
+      case 'no-response':
+        return appointment.status === 'scheduled' && isPastAppointment;
       default:
         return true;
     }
@@ -217,6 +224,21 @@ const AppointmentList = () => {
                   Cancelled/No-show
                 </div>
               </button>
+              <button
+                onClick={() => setActiveTab('no-response')}
+                className={`flex-1 py-3 px-4 font-medium text-sm transition-colors duration-200 ${
+                  activeTab === 'no-response'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 mr-2 ${activeTab === 'no-response' ? 'text-blue-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  No Response
+                </div>
+              </button>
             </nav>
           </div>
           
@@ -360,7 +382,9 @@ const AppointmentList = () => {
                     ? "You don't have any upcoming appointments scheduled." 
                     : activeTab === 'completed'
                       ? "You haven't completed any appointments yet."
-                      : "You don't have any cancelled or missed appointments."}
+                      : activeTab === 'no-response'
+                        ? "You don't have any past appointments awaiting response."
+                        : "You don't have any cancelled or missed appointments."}
                 </p>
                 {activeTab === 'upcoming' && (
                   <Link 
