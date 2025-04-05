@@ -11,19 +11,19 @@ import ReviewDialog from '../components/review/ReviewDialog';
 // Helper function to attempt video play with multiple approaches
 const attemptVideoPlay = (videoElement) => {
   if (!videoElement) return false;
-  
+
   console.log('Attempting to play video with multiple methods');
-  
+
   // Try standard play
   videoElement.play().catch(err => {
     console.log('Standard play failed, trying alternatives', err);
-    
+
     // Try with user interaction trigger
     document.addEventListener('click', function playOnClick() {
       videoElement.play().catch(e => console.error('Click play failed:', e));
       document.removeEventListener('click', playOnClick);
     }, { once: true });
-    
+
     // Try with muted first (browsers are more permissive with muted videos)
     videoElement.muted = true;
     videoElement.play().then(() => {
@@ -43,7 +43,7 @@ const checkPermissions = async () => {
     if (navigator.permissions) {
       const cameraPermission = await navigator.permissions.query({ name: 'camera' });
       console.log('Camera permission state:', cameraPermission.state);
-      
+
       if (cameraPermission.state === 'denied') {
         toast.error('Camera access is blocked. Please update your browser settings.');
         setError('Camera permission denied. Please enable camera access in your browser settings.');
@@ -58,11 +58,11 @@ const VideoConsultation = () => {
   const params = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  
+
   const id = params.appointmentId || params.id;
-  
+
   console.log('VideoConsultation rendering with ID:', id);
-  
+
   const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,43 +74,46 @@ const VideoConsultation = () => {
   const [consultationId, setConsultationId] = useState(null);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+
   // Media stream states
   const [localStream, setLocalStream] = useState(null);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
-  
+
   // Refs
   const chatContainerRef = useRef(null);
   const localVideoRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const agoraServiceRef = useRef(null);
-  
+
   // Fetch appointment and initialize video call
   useEffect(() => {
     let isMounted = true;
-    
+
     const initializeVideoCall = async () => {
       try {
         setLoading(true);
         setError(null);
-        
+
         console.log('Initializing video call for appointment:', id);
-        
+
         // First get appointment details
         const appointmentResponse = await api.appointments.getById(id);
         if (!isMounted) return;
         setAppointment(appointmentResponse.data.data);
-        
+
         // Join socket room for chat
         socketService.joinConsultation(id);
         console.log('Joined socket consultation for appointment:', id);
-        
+
         // Generate channel name consistently
         const channelName = `healthpal_${id}`;
         console.log('Using channel name:', channelName);
-        
+
         try {
           // Request token from server
           const tokenResponse = await api.video.getToken({
@@ -118,33 +121,33 @@ const VideoConsultation = () => {
             uid: 0,
             role: 'publisher'
           });
-          
+
           if (!tokenResponse?.data?.token) {
             throw new Error('Failed to get token from server');
           }
-          
+
           const { token } = tokenResponse.data;
           console.log('Received token successfully');
-          
+
           // Initialize Agora client
           const { default: agoraService } = await import('../services/agoraService');
           agoraServiceRef.current = agoraService;
-          
+
           // Reset client to ensure clean state
           await agoraService.resetClient();
-          
+
           // Initialize client with event handlers
           await agoraService.initialize();
-          
+
           // Join the channel with a slight delay to ensure initialization is complete
           setTimeout(async () => {
             if (!isMounted) return;
-            
+
             try {
               // Join the channel
               const tracks = await agoraService.joinChannel(channelName, token);
               console.log('Successfully joined Agora channel with tracks:', tracks);
-              
+
               // Set connected state
               setConnected(true);
             } catch (joinError) {
@@ -166,22 +169,22 @@ const VideoConsultation = () => {
         if (isMounted) setLoading(false);
       }
     };
-    
+
     initializeVideoCall();
-    
+
     return () => {
       isMounted = false;
-      
+
       // Clean up socket connection
       socketService.disconnect();
-      
+
       // Clean up Agora channel
       if (agoraServiceRef.current) {
         agoraServiceRef.current.leaveChannel().catch(err => {
           console.error('Error leaving Agora channel:', err);
         });
       }
-      
+
       // Clean up media streams
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
@@ -193,7 +196,7 @@ const VideoConsultation = () => {
   const initializeMedia = async () => {
     try {
       console.log('Initializing WebRTC media fallback');
-      
+
       // Define explicit constraints for better compatibility
       const constraints = {
         video: {
@@ -204,25 +207,25 @@ const VideoConsultation = () => {
         },
         audio: true
       };
-      
+
       // Request media access
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('Got media stream with tracks:', stream.getTracks().map(t => `${t.kind}: ${t.label} (${t.readyState})`));
-      
+
       // Store stream reference
       mediaStreamRef.current = stream;
       setLocalStream(stream);
-      
+
       // Set local video element source
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
-        
+
         try {
           await localVideoRef.current.play();
           console.log('Local video playing successfully');
         } catch (playErr) {
           console.error('Error playing local video:', playErr);
-          
+
           // Add a play button as fallback for autoplay restrictions
           const container = document.getElementById('local-video-container');
           if (container) {
@@ -237,7 +240,7 @@ const VideoConsultation = () => {
           }
         }
       }
-      
+
       setConnected(true);
     } catch (err) {
       console.error('Error accessing media devices:', err);
@@ -248,76 +251,67 @@ const VideoConsultation = () => {
 
   // Toggle camera on/off
   const toggleCamera = () => {
-    let newState = !isCameraOn;
-    
     // Try to toggle Agora video first
-    if (agoraServiceRef.current) {
+    if (agoraServiceRef.current && agoraServiceRef.current.localTracks) {
       try {
-        const result = agoraServiceRef.current.toggleVideo();
-        if (typeof result === 'boolean') {
-          newState = !result; // Use the result from Agora if available
-        }
+        const newState = agoraServiceRef.current.toggleVideo();
+        console.log('Toggled camera to:', newState);
+        setIsCameraOn(newState);
+        return;
       } catch (err) {
         console.error('Error toggling Agora video:', err);
       }
     }
-    
-    // Also toggle WebRTC video as fallback
+
+    // Fallback to WebRTC
     if (mediaStreamRef.current) {
+      const newState = !isCameraOn;
       mediaStreamRef.current.getVideoTracks().forEach(track => {
         track.enabled = newState;
       });
+      setIsCameraOn(newState);
     }
-    
-    setIsCameraOn(newState);
   };
 
   // Toggle microphone on/off
   const toggleMic = () => {
-    const currentlyMuted = !isMicOn;
-    const targetState = !currentlyMuted; // We want isMicOn to be true when audio is enabled
-    
     // Try to toggle Agora audio first
-    if (agoraServiceRef.current) {
+    if (agoraServiceRef.current && agoraServiceRef.current.localTracks) {
       try {
-        // For Agora, true means enabled (unmuted), false means disabled (muted)
-        const tracks = agoraServiceRef.current.localTracks;
-        if (tracks && tracks.audioTrack) {
-          tracks.audioTrack.setEnabled(targetState);
-          console.log(`Agora mic ${targetState ? 'enabled' : 'disabled'}`);
-        }
+        const newState = agoraServiceRef.current.toggleAudio();
+        console.log('Toggled microphone to:', newState);
+        setIsMicOn(newState);
+        return;
       } catch (err) {
         console.error('Error toggling Agora audio:', err);
       }
     }
-    
-    // Also toggle WebRTC audio as fallback
+
+    // Fallback to WebRTC
     if (mediaStreamRef.current) {
+      const newState = !isMicOn;
       mediaStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = targetState;
-        console.log(`WebRTC audio track ${targetState ? 'enabled' : 'disabled'}`);
+        track.enabled = newState;
       });
+      setIsMicOn(newState);
     }
-    
-    // Update state
-    setIsMicOn(targetState);
   };
 
   // Handle sending messages
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-    
+
     const messageData = {
       sender: currentUser.role,
       text: newMessage,
       timestamp: new Date().toISOString()
     };
-    
+
     const messageWithId = socketService.sendMessage(id, messageData);
     setMessages(prevMessages => [...prevMessages, messageWithId]);
     setNewMessage('');
-    
+
     setTimeout(() => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -327,73 +321,47 @@ const VideoConsultation = () => {
 
   // End consultation handler
   const handleEndConsultation = async () => {
-    try {
-      // Stop media tracks
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-      
-      // Leave Agora channel
-      if (agoraServiceRef.current) {
-        await agoraServiceRef.current.leaveChannel();
-      }
-      
-      if (currentUser.role === 'doctor') {
-        await api.appointments.updateStatus(id, 'completed');
-        
-        const consultationData = {
-          appointmentId: id,
-          symptoms: appointment.reason || 'Video consultation',
-          diagnosis: 'Video consultation completed',
-          notes: 'Conducted via video call',
-          vitalSigns: {},
-          followUpRequired: false
-        };
-        
-        try {
-          const consultationResponse = await api.consultations.create(consultationData);
-          console.log('Consultation created:', consultationResponse.data);
-          toast.success('Consultation has been completed and recorded');
-          setConsultationId(consultationResponse.data.data._id);
-        } catch (consultErr) {
-          console.error('Error creating consultation record:', consultErr);
-          toast.warning('Appointment marked as completed, but there was an issue recording consultation details');
-        }
-      } else {
-        setShowReviewDialog(true);
-        return; 
-      }
-      
-      const systemMessage = {
-        sender: 'system',
-        text: 'The consultation has ended',
-        id: 'system-end-' + Date.now()
-      };
-      
-      socketService.sendMessage(id, systemMessage);
-      
-      const appointmentPath = currentUser.role === 'doctor' 
-        ? `/doctor/appointments/${id}` 
-        : `/appointments/${id}`;
+    if (window.confirm('Are you sure you want to end this consultation?')) {
+      try {
+        setLoading(true);
 
-      navigate(appointmentPath);
-    } catch (err) {
-      console.error('Error ending consultation:', err);
-      toast.error('Failed to end consultation');
+        // Clean up video/audio
+        if (agoraServiceRef.current) {
+          await agoraServiceRef.current.leaveChannel();
+        }
+
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        }
+
+        // Update appointment status if needed
+        if (currentUser.role === 'doctor') {
+          await api.appointments.update(id, { status: 'completed' });
+        }
+
+        // Show review dialog
+        setShowReviewModal(true);
+
+      } catch (error) {
+        console.error('Error ending consultation:', error);
+        toast.error('Failed to end consultation properly');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   // Review dialog closing handler
   const handleReviewClose = (reviewed) => {
     setShowReviewDialog(false);
-    
+
     // Use role-based path
-    const appointmentPath = currentUser.role === 'doctor' 
-      ? `/doctor/appointments/${id}` 
+    const appointmentPath = currentUser.role === 'doctor'
+      ? `/doctor/appointments/${id}`
       : `/appointments/${id}`;
-    
+
     navigate(appointmentPath);
-    
+
     if (reviewed) {
       toast.success('Thank you for your feedback!');
     }
@@ -402,19 +370,19 @@ const VideoConsultation = () => {
   const handleReconnect = () => {
     setReconnecting(true);
     toast.info("Reconnecting to video call...");
-    
+
     // Clean up existing connections
     if (agoraServiceRef.current) {
       agoraServiceRef.current.leaveChannel().catch(err => {
         console.error('Error leaving Agora channel during reconnect:', err);
       });
     }
-    
+
     // Stop any existing media streams
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    
+
     // Force window reload to reinitialize everything
     setTimeout(() => {
       window.location.reload();
@@ -436,7 +404,7 @@ const VideoConsultation = () => {
       <div className="p-4">
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
           <p className="text-red-700">{error}</p>
-          <button 
+          <button
             onClick={() => navigate(`/appointments/${id}`)}
             className="mt-2 text-sm text-primary-600 hover:text-primary-800"
           >
@@ -451,8 +419,8 @@ const VideoConsultation = () => {
     return <div className="p-4">Appointment not found</div>;
   }
 
-  const otherPerson = currentUser.role === 'doctor' 
-    ? appointment.patient 
+  const otherPerson = currentUser.role === 'doctor'
+    ? appointment.patient
     : { name: `Dr. ${appointment.doctor.name}` };
 
   return (
@@ -473,7 +441,7 @@ const VideoConsultation = () => {
             <span>{new Date(appointment?.date).toLocaleDateString()}</span>
           </div>
         </div>
-        
+
         {/* Main content */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
           {/* Video area */}
@@ -488,7 +456,7 @@ const VideoConsultation = () => {
                   </svg>
                   {isCameraOn ? 'On' : 'Off'}
                 </div>
-                
+
                 <div className={`flex items-center px-2 py-1 rounded-full text-xs ${isMicOn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -507,7 +475,7 @@ const VideoConsultation = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Local video miniature */}
               <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 border-2 border-white rounded overflow-hidden z-20">
                 <div id="local-video-container" className="w-full h-full">
@@ -515,7 +483,7 @@ const VideoConsultation = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-gray-100 p-4 rounded-lg">
               <h2 className="font-medium text-gray-700 mb-2">Patient Information</h2>
               <div className="space-y-2 text-sm">
@@ -524,14 +492,14 @@ const VideoConsultation = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Chat area */}
           <div className="h-[500px] flex flex-col border rounded-lg">
             <div className="bg-gray-50 border-b px-4 py-2">
               <h2 className="font-medium">Chat with {otherPerson.name}</h2>
             </div>
-            
-            <div 
+
+            <div
               ref={chatContainerRef}
               className="flex-1 p-4 space-y-4 overflow-y-auto"
             >
@@ -548,16 +516,16 @@ const VideoConsultation = () => {
                 </div>
               ) : (
                 messages.map((msg, index) => (
-                  <div 
-                    key={msg.id || index} 
+                  <div
+                    key={msg.id || index}
                     className={`flex ${msg.sender === currentUser.role ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div 
+                    <div
                       className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                        msg.sender === 'system' 
-                          ? 'bg-gray-200 text-gray-700 mx-auto text-center' 
-                          : msg.sender === currentUser.role 
-                            ? 'bg-primary-600 text-white' 
+                        msg.sender === 'system'
+                          ? 'bg-gray-200 text-gray-700 mx-auto text-center'
+                          : msg.sender === currentUser.role
+                            ? 'bg-primary-600 text-white'
                             : 'bg-gray-200 text-gray-800'
                       }`}
                     >
@@ -567,7 +535,7 @@ const VideoConsultation = () => {
                 ))
               )}
             </div>
-            
+
             <form onSubmit={handleSendMessage} className="border-t p-2 flex">
               <input
                 type="text"
@@ -576,7 +544,7 @@ const VideoConsultation = () => {
                 placeholder="Type a message..."
                 className="flex-1 p-2 border rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
-              <button 
+              <button
                 type="submit"
                 className="bg-primary-600 text-white px-4 py-2 rounded-r-md"
               >
@@ -605,7 +573,7 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
-          
+
           <button
             onClick={toggleMic}
             className={`p-3 rounded-full ${isMicOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'} transition-all duration-200 flex items-center justify-center`}
@@ -622,7 +590,7 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
-          
+
           {currentUser.role === 'doctor' && (
             <button
               onClick={() => setShowPrescriptionModal(true)}
@@ -634,15 +602,14 @@ const VideoConsultation = () => {
               </svg>
             </button>
           )}
-          
-          {/* Replace End Consultation with Return to Appointments button */}
+
           <button
-            onClick={() => navigate(currentUser.role === 'doctor' ? `/doctor/appointments/${id}` : `/appointments/${id}`)}
-            className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-all duration-200 flex items-center justify-center"
-            title="Return to Appointments"
+            onClick={handleEndConsultation}
+            className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 transition-all duration-200 flex items-center justify-center"
+            title="End Consultation"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
             </svg>
           </button>
         </div>
@@ -689,7 +656,7 @@ const VideoConsultation = () => {
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Write Prescription</h2>
-            <PrescriptionForm 
+            <PrescriptionForm
               consultationId={consultationId}
               patientId={appointment?.patient?._id}
               doctorId={currentUser?._id}
@@ -702,7 +669,7 @@ const VideoConsultation = () => {
           </div>
         </div>
       )}
-      
+
       {/* Review Dialog */}
       {showReviewDialog && (
         <ReviewDialog
@@ -711,6 +678,81 @@ const VideoConsultation = () => {
           appointmentId={appointment._id}
           onClose={handleReviewClose}
         />
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">How was your consultation?</h3>
+            <p className="text-gray-600 mb-6">Please rate your experience and provide any feedback.</p>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Rating</label>
+              <div className="flex space-x-2">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button
+                    key={rating}
+                    className={`w-10 h-10 rounded-full ${reviewRating >= rating ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-600'}`}
+                    onClick={() => setReviewRating(rating)}
+                  >
+                    {rating}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-gray-700 mb-2">Comments</label>
+              <textarea
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                rows="4"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Share your experience (optional)"
+              ></textarea>
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                onClick={() => {
+                  setShowReviewModal(false);
+                  navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
+                }}
+              >
+                Skip
+              </button>
+              <button
+                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+                onClick={async () => {
+                  try {
+                    // Submit review if rating provided
+                    if (reviewRating > 0) {
+                      await api.appointments.submitReview(id, {
+                        rating: reviewRating,
+                        comment: reviewComment,
+                        reviewedBy: currentUser.role
+                      });
+                      toast.success('Thank you for your feedback!');
+                    }
+                    
+                    // Navigate back to appointments
+                    navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
+                  } catch (error) {
+                    console.error('Error submitting review:', error);
+                    toast.error('Failed to submit review');
+                    
+                    // Still navigate back even if review submission fails
+                    navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
+                  }
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
