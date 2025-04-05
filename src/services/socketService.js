@@ -52,19 +52,34 @@ class SocketService {
   }
 
   joinConsultation(consultationId) {
-    if (!this.socket) this.connect();
-    
-    // Only join if not already in this consultation
-    if (this.activeConsultationId !== consultationId) {
-      // Leave previous room if any
-      if (this.activeConsultationId) {
-        this.socket.emit('leave-consultation', this.activeConsultationId);
-      }
+    if (!this.socket || !this.socket.connected) {
+      this.connect();
       
-      console.log(`Joining consultation room: ${consultationId}`);
-      this.socket.emit('join-consultation', consultationId);
-      this.activeConsultationId = consultationId;
+      // After connecting, we need to wait a bit for the connection to be established
+      setTimeout(() => {
+        this.emitJoinConsultation(consultationId);
+      }, 1000);
+    } else {
+      this.emitJoinConsultation(consultationId);
     }
+  }
+
+  // Helper method to emit join event
+  emitJoinConsultation(consultationId) {
+    if (!consultationId) {
+      console.error('No consultation ID provided');
+      return;
+    }
+    
+    // Leave previous room if any
+    if (this.activeConsultationId && this.activeConsultationId !== consultationId) {
+      console.log(`Leaving previous consultation: ${this.activeConsultationId}`);
+      this.socket.emit('leave-consultation', this.activeConsultationId);
+    }
+    
+    console.log(`Joining consultation room: ${consultationId}`);
+    this.socket.emit('join-consultation', consultationId);
+    this.activeConsultationId = consultationId;
   }
 
   sendMessage(consultationId, message) {
@@ -85,6 +100,27 @@ class SocketService {
     if (!this.socket) this.connect();
     this.messageCallbacks.add(callback);
     return () => this.messageCallbacks.delete(callback);
+  }
+
+  listenForMessages(consultationId, callback) {
+    if (!this.socket) this.connect();
+    
+    // First join the consultation to ensure we're in the right room
+    this.joinConsultation(consultationId);
+    
+    // Register the callback
+    const wrappedCallback = (message) => {
+      console.log('Received message in room:', consultationId, message);
+      callback(message);
+    };
+    
+    this.messageCallbacks.add(wrappedCallback);
+    
+    // Return a cleanup function
+    return () => {
+      console.log('Removing message callback');
+      this.messageCallbacks.delete(wrappedCallback);
+    };
   }
 
   disconnect() {

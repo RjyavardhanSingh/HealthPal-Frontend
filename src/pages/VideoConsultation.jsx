@@ -75,7 +75,7 @@ const VideoConsultation = () => {
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewRating, setReviewRating] = useState(5); // Default to 5 stars
   const [reviewComment, setReviewComment] = useState('');
 
   // Media stream states
@@ -93,6 +93,7 @@ const VideoConsultation = () => {
   // Fetch appointment and initialize video call
   useEffect(() => {
     let isMounted = true;
+    let cleanupListener = null;
 
     const initializeVideoCall = async () => {
       try {
@@ -108,7 +109,25 @@ const VideoConsultation = () => {
 
         // Join socket room for chat
         socketService.joinConsultation(id);
-        console.log('Joined socket consultation for appointment:', id);
+
+        // Listen for messages with improved handler
+        cleanupListener = socketService.listenForMessages(id, (message) => {
+          if (isMounted) {
+            console.log('Got message in component:', message);
+            setMessages(prev => {
+              // Check if message already exists to prevent duplicates
+              if (prev.some(m => m.id === message.id)) return prev;
+              return [...prev, message];
+            });
+
+            // Auto-scroll chat to bottom
+            setTimeout(() => {
+              if (chatContainerRef.current) {
+                chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+              }
+            }, 100);
+          }
+        });
 
         // Generate channel name consistently
         const channelName = `healthpal_${id}`;
@@ -174,6 +193,11 @@ const VideoConsultation = () => {
 
     return () => {
       isMounted = false;
+
+      // Clean up message listener
+      if (cleanupListener) {
+        cleanupListener();
+      }
 
       // Clean up socket connection
       socketService.disconnect();
@@ -336,7 +360,13 @@ const VideoConsultation = () => {
 
         // Update appointment status if needed
         if (currentUser.role === 'doctor') {
-          await api.appointments.update(id, { status: 'completed' });
+          try {
+            await api.appointments.update(id, { status: 'completed' });
+            console.log('Appointment marked as completed');
+          } catch (updateErr) {
+            console.error('Error updating appointment status:', updateErr);
+            // Continue execution - we still want to show the review dialog
+          }
         }
 
         // Show review dialog
@@ -573,7 +603,7 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
-
+          
           <button
             onClick={toggleMic}
             className={`p-3 rounded-full ${isMicOn ? 'bg-primary-600 text-white' : 'bg-red-600 text-white'} transition-all duration-200 flex items-center justify-center`}
@@ -590,7 +620,7 @@ const VideoConsultation = () => {
               </svg>
             )}
           </button>
-
+          
           {currentUser.role === 'doctor' && (
             <button
               onClick={() => setShowPrescriptionModal(true)}
@@ -602,7 +632,7 @@ const VideoConsultation = () => {
               </svg>
             </button>
           )}
-
+          
           <button
             onClick={handleEndConsultation}
             className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 transition-all duration-200 flex items-center justify-center"
@@ -728,12 +758,25 @@ const VideoConsultation = () => {
                 onClick={async () => {
                   try {
                     // Submit review if rating provided
-                    if (reviewRating > 0) {
-                      await api.appointments.submitReview(id, {
-                        rating: reviewRating,
-                        comment: reviewComment,
-                        reviewedBy: currentUser.role
-                      });
+                    if (reviewRating > 0 && appointment) {
+                      if (currentUser.role === 'doctor') {
+                        // For doctors reviewing patients
+                        await api.reviews.create({
+                          reviewedId: appointment.patient._id,
+                          appointmentId: id,
+                          rating: reviewRating,
+                          comment: reviewComment
+                        });
+                      } else {
+                        // For patients reviewing doctors
+                        await api.reviews.create({
+                          reviewedId: appointment.doctor._id,
+                          appointmentId: id,
+                          rating: reviewRating,
+                          comment: reviewComment
+                        });
+                      }
+                      
                       toast.success('Thank you for your feedback!');
                     }
                     
@@ -741,9 +784,7 @@ const VideoConsultation = () => {
                     navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
                   } catch (error) {
                     console.error('Error submitting review:', error);
-                    toast.error('Failed to submit review');
-                    
-                    // Still navigate back even if review submission fails
+                    toast.error('Failed to submit review. Returning to appointments...');
                     navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
                   }
                 }}
