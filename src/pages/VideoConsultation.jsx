@@ -73,6 +73,7 @@ const VideoConsultation = () => {
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [consultationId, setConsultationId] = useState(null);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   
   // Media stream states
   const [localStream, setLocalStream] = useState(null);
@@ -89,193 +90,138 @@ const VideoConsultation = () => {
   // Fetch appointment and initialize video call
   useEffect(() => {
     let isMounted = true;
-    let removeListener = null;
-
-    checkPermissions();
     
-    const fetchAppointment = async () => {
+    const initializeVideoCall = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        console.log('Fetching appointment for video call:', id);
+        console.log('Initializing video call for appointment:', id);
+        
+        // First get appointment details
         const appointmentResponse = await api.appointments.getById(id);
         if (!isMounted) return;
         setAppointment(appointmentResponse.data.data);
         
-        // Mark the appointment as started
-        if (!appointmentResponse.data.data.consultationStarted) {
-          try {
-            await api.appointments.updateStatus(id, 'in-progress');
-            setConsultationStarted(true);
-          } catch (updateErr) {
-            console.error('Error updating appointment status:', updateErr);
-            // Continue anyway - non-critical error
-          }
-        } else {
-          setConsultationStarted(true);
+        // Generate channel name consistently
+        const channelName = `healthpal_${id}`;
+        console.log('Using channel name:', channelName);
+        
+        // Request token from server
+        const tokenResponse = await api.video.getToken({
+          channelName,
+          uid: 0, // Use 0 for dynamic assignment
+          role: 'publisher'
+        });
+        
+        if (!tokenResponse?.data?.token) {
+          throw new Error('Failed to get token from server');
         }
         
-        // Initialize Agora service
-        try {
-          const agoraModule = await import('../services/agoraService');
-          const agoraService = agoraModule.default;
+        const { token } = tokenResponse.data;
+        console.log('Received token successfully');
+        
+        // Initialize Agora client
+        const { default: agoraService } = await import('../services/agoraService');
+        agoraServiceRef.current = agoraService;
+        
+        // Join the channel with the token
+        setTimeout(async () => {
+          if (!isMounted) return;
           
-          // Generate proper channel name
-          const channelName = `healthpal_${id}`;
-          console.log(`Using channel name: ${channelName}`);
-          
-          // Request token
-          console.log('Requesting Agora token');
-          const tokenResponse = await api.video.getToken({
-            channelName,
-            uid: 0,
-            role: 'publisher'
-          });
-          
-          console.log('Token response received');
-          
-          if (tokenResponse?.data?.token) {
-            const { token } = tokenResponse.data;
-            
-            // Join the channel with the token
-            console.log('Joining Agora channel');
-            
-            // Wait for DOM to be ready
-            setTimeout(async () => {
-              try {
+          try {
+            console.log('Joining Agora channel:', channelName);
+            const localUser = await agoraServiceRef.current.joinChannel(
+              channelName,
+              token,
+              null,
+              (user) => {
+                console.log('Remote user joined:', user.uid);
                 if (!isMounted) return;
                 
-                const localUser = await agoraService.joinChannel(
-                  channelName, 
-                  token, 
-                  null,
-                  (user) => {
-                    console.log('Remote user joined:', user.uid);
-                    if (!isMounted) return;
-                    
-                    setConnected(true);
-                    
-                    // Play remote video
-                    if (user.videoTrack) {
-                      console.log('Playing remote video');
+                setConnected(true);
+                
+                // Critical fix: Properly handle remote video track
+                if (user.videoTrack) {
+                  console.log('Remote user has video, attempting to play in remote container');
+                  
+                  // Use setTimeout to ensure DOM element is ready
+                  setTimeout(() => {
+                    try {
                       const remoteContainer = document.getElementById('remote-video-container');
                       if (remoteContainer) {
+                        console.log('Playing remote video in container');
                         user.videoTrack.play(remoteContainer);
+                      } else {
+                        console.error('Remote container not found');
                       }
+                    } catch (err) {
+                      console.error('Error playing remote video:', err);
                     }
-                  },
-                  (user) => {
-                    console.log('Remote user left:', user.uid);
-                  }
-                );
-                
-                console.log('Joined Agora channel successfully');
-                
-                // Play local video track
-                if (localUser && localUser.videoTrack) {
-                  console.log('Playing local video track');
-                  const localContainer = document.getElementById('local-video-container');
-                  if (localContainer) {
-                    localUser.videoTrack.play(localContainer);
-                  }
+                  }, 1000);
                 }
                 
-                // Standard WebRTC as fallback
-                if (!localUser || !localUser.videoTrack) {
-                  initializeMedia();
+                // Play remote audio automatically
+                if (user.audioTrack) {
+                  console.log('Playing remote audio');
+                  user.audioTrack.play();
                 }
-                
-              } catch (agoraErr) {
-                console.error('Error in Agora setup:', agoraErr);
-                // Fallback to standard WebRTC
-                initializeMedia();
+              },
+              (user) => {
+                console.log('Remote user left:', user.uid);
               }
-            }, 500);
+            );
             
-          } else {
-            throw new Error('Invalid token received from server');
+            // Play local video track
+            if (localUser && localUser.videoTrack) {
+              console.log('Playing local video track');
+              const localContainer = document.getElementById('local-video-container');
+              if (localContainer) {
+                localUser.videoTrack.play(localContainer);
+              }
+            }
+            
+            // Standard WebRTC as fallback
+            if (!localUser || !localUser.videoTrack) {
+              console.log('No local user or video track, using fallback');
+              initializeMedia();
+            }
+            
+          } catch (agoraErr) {
+            console.error('Agora initialization error:', agoraErr);
+            initializeMedia(); // Fallback to standard WebRTC
           }
-        } catch (tokenError) {
-          console.error('Token error:', tokenError);
-          setError(`Failed to initialize video call: ${tokenError.message}`);
-          // Fallback
-          initializeMedia();
-        }
+        }, 1000);
+        
       } catch (err) {
         if (isMounted) {
-          console.error('Error fetching appointment:', err);
+          console.error('Error setting up video call:', err);
           setError(`Failed to initialize video call: ${err.message}`);
-          initializeMedia();
+          initializeMedia(); // Try fallback
         }
       } finally {
         if (isMounted) setLoading(false);
       }
     };
-
-    // Register socket message handler
-    removeListener = socketService.onMessageReceived((message) => {
-      if (isMounted) {
-        setMessages(prevMessages => {
-          if (message.id && prevMessages.some(m => m.id === message.id)) {
-            return prevMessages;
-          }
-          return [...prevMessages, message];
-        });
-        
-        setTimeout(() => {
-          if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-          }
-        }, 100);
-      }
-    });
-
-    // Join the socket consultation
-    socketService.joinConsultation(id);
-
-    // Add system message when joining
-    const joinMessage = {
-      sender: 'system',
-      text: `${currentUser.role === 'doctor' ? 'Doctor' : 'Patient'} joined the consultation`,
-      id: 'system-join-' + Date.now()
-    };
-    socketService.sendMessage(id, joinMessage);
     
-    // Start the call
-    fetchAppointment();
+    initializeVideoCall();
     
-    // Cleanup function
     return () => {
       isMounted = false;
-      if (removeListener) removeListener();
       
-      // Clean up socket connection - only need disconnect
-      socketService.disconnect();
-      
-      // Clean up media streams
-      if (mediaStreamRef.current) {
-        console.log('Stopping all media tracks');
-        mediaStreamRef.current.getTracks().forEach(track => {
-          console.log(`Stopping ${track.kind} track`);
-          track.stop();
-        });
-        mediaStreamRef.current = null;
-      }
-      
-      // Clear video srcObject
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-      
-      // Leave Agora channel if initialized
+      // Clean up Agora channel
       if (agoraServiceRef.current) {
         agoraServiceRef.current.leaveChannel().catch(err => {
           console.error('Error leaving Agora channel:', err);
         });
       }
+      
+      // Clean up media streams
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [id, currentUser.role]);
+  }, [id]);
 
   // Initialize regular WebRTC media (fallback)
   const initializeMedia = async () => {
@@ -490,8 +436,35 @@ const VideoConsultation = () => {
     }
   };
 
+  const handleReconnect = () => {
+    setReconnecting(true);
+    
+    // Clean up existing connections
+    if (agoraServiceRef.current) {
+      agoraServiceRef.current.leaveChannel().catch(err => {
+        console.error('Error leaving channel during reconnect:', err);
+      });
+    }
+    
+    // Stop any existing media streams
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    
+    // Reinitialize with a slight delay
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  };
+
   if (loading) {
-    return <div className="flex justify-center p-8"><LoadingSpinner /></div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+        <LoadingSpinner size="lg" />
+        <p className="mt-4 text-gray-600 font-medium">Setting up your video consultation...</p>
+        <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
+      </div>
+    );
   }
 
   if (error) {
@@ -543,8 +516,10 @@ const VideoConsultation = () => {
           {/* Video area */}
           <div className="md:col-span-2">
             <div className="aspect-video bg-gray-800 rounded-lg mb-4 relative overflow-hidden">
-              {/* Remote video container */}
+              {/* Remote video container with multiple IDs for redundancy */}
               <div id="remote-video-container" className="w-full h-full">
+                <div id="remote-video-0" className="w-full h-full"></div>
+                
                 {!connected && (
                   <div className="text-gray-400 text-center flex flex-col items-center justify-center h-full">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -563,14 +538,7 @@ const VideoConsultation = () => {
                     autoPlay
                     playsInline
                     muted
-                    style={{ 
-                      backgroundColor: "#000",
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover"
-                    }}
-                    onLoadedMetadata={() => console.log('Video metadata loaded')}
-                    onCanPlay={() => console.log('Video can play now')}
+                    className="w-full h-full object-cover"
                   ></video>
                 </div>
               </div>
@@ -698,6 +666,28 @@ const VideoConsultation = () => {
           )}
         </div>
       </div>
+
+      {/* Reconnect Button */}
+      {!loading && (
+        <div className="text-center my-4">
+          <button
+            onClick={handleReconnect}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            disabled={reconnecting}
+          >
+            {reconnecting ? 'Reconnecting...' : 'Reconnect Video'}
+            {reconnecting ? (
+              <span className="ml-2">
+                <LoadingSpinner size="sm" />
+              </span>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Prescription Modal */}
       {showPrescriptionModal && (

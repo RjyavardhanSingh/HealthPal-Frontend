@@ -16,10 +16,73 @@ class AgoraService {
     if (!this.client) {
       console.log('Initializing Agora client');
       this.client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      
+      // Make sure events are properly attached
+      this.setupClientEvents();
     }
     return this.client;
   }
-  
+
+  setupClientEvents() {
+    if (this.eventsInitialized) return;
+    
+    this.client.on('user-published', async (user, mediaType) => {
+      console.log(`Remote user ${user.uid} published ${mediaType}`);
+      
+      await this.client.subscribe(user, mediaType);
+      console.log(`Subscribed to ${mediaType} from user ${user.uid}`);
+      
+      if (mediaType === 'video') {
+        console.log(`Processing remote video for user ${user.uid}`);
+        
+        // More robust element targeting
+        setTimeout(() => {
+          try {
+            // Try multiple container elements in sequence
+            const containers = [
+              document.getElementById(`remote-video-${user.uid}`),
+              document.getElementById('remote-video-container'),
+              document.getElementById('remote-video-0')
+            ];
+            
+            let played = false;
+            for (const container of containers) {
+              if (container) {
+                console.log(`Playing video in container: ${container.id}`);
+                user.videoTrack.play(container);
+                played = true;
+                break;
+              }
+            }
+            
+            if (!played) {
+              console.error('No suitable container found for remote video');
+              // Last resort - play in any video container
+              const anyContainer = document.querySelector('.aspect-video');
+              if (anyContainer) {
+                console.log('Playing in fallback container');
+                user.videoTrack.play(anyContainer);
+              }
+            }
+          } catch (playError) {
+            console.error(`Error playing remote video for user ${user.uid}:`, playError);
+          }
+        }, 1000);
+      }
+      
+      if (mediaType === 'audio') {
+        try {
+          user.audioTrack.play();
+          console.log(`Playing remote audio for user ${user.uid}`);
+        } catch (audioError) {
+          console.error(`Error playing remote audio for user ${user.uid}:`, audioError);
+        }
+      }
+    });
+    
+    this.eventsInitialized = true;
+  }
+
   isConnected() {
     return this.client && (
       this.client.connectionState === 'CONNECTED' || 
@@ -27,102 +90,56 @@ class AgoraService {
     );
   }
 
-  async joinChannel(channelName, token, uid = null, onUserPublished = null, onUserLeft = null) {
+  async joinChannel(channelName, token, uid = null, onUserJoined, onUserLeft) {
     try {
-      if (this.isJoining) {
-        console.log('Join already in progress, ignoring redundant request');
-        return null;
+      if (!this.client) {
+        await this.initialize();
       }
       
-      this.isJoining = true;
-      console.log(`Attempting to join channel: ${channelName} with token: ${token ? 'Present' : 'Missing'}`);
-      
-      if (this.isConnected()) {
-        console.log('Already connected to a channel, leaving first...');
-        await this.leaveChannel();
-      }
-      
-      await this.initialize();
-      
-      if (!this.eventsInitialized) {
-        this.client.on('user-published', async (user, mediaType) => {
-          console.log(`Remote user ${user.uid} published ${mediaType}`);
-          await this.client.subscribe(user, mediaType);
-          
-          if (mediaType === 'video') {
-            console.log(`Playing remote user ${user.uid} video`);
-            // Fix: Use element ID instead of element reference
-            user.videoTrack.play(`remote-video-${user.uid}`, {fit: 'cover'});
-            if (onUserPublished) onUserPublished(user);
-          }
-          
-          if (mediaType === 'audio') {
-            console.log(`Playing remote user ${user.uid} audio`);
-            user.audioTrack.play();
-          }
-        });
+      // Set up event handlers for remote users
+      this.client.on('user-published', async (user, mediaType) => {
+        console.log(`User ${user.uid} published ${mediaType} track`);
         
-        this.client.on('user-left', (user) => {
-          console.log('Remote user left:', user.uid);
-          if (onUserLeft) onUserLeft(user);
-        });
+        // Subscribe to the remote user
+        await this.client.subscribe(user, mediaType);
+        console.log(`Subscribed to ${mediaType} track of user ${user.uid}`);
         
-        this.eventsInitialized = true;
-      }
-      
-      const joinedUid = uid || Math.floor(Math.random() * 100000);
-      console.log(`Joining channel "${channelName}" with UID: ${joinedUid}`);
-      
-      try {
-        // First try with token
-        if (token) {
-          console.log('Joining with token');
-          await this.client.join(
-            this.appId,
-            channelName,
-            token,
-            joinedUid
-          );
-        } else {
-          // Fallback to join without token (dev mode only)
-          console.log('Joining without token (development mode)');
-          await this.client.join(
-            this.appId,
-            channelName,
-            null,
-            joinedUid
-          );
+        // Call the callback to handle the user joining
+        if (onUserJoined && typeof onUserJoined === 'function') {
+          onUserJoined(user);
         }
-        
-        console.log('Client joined channel successfully');
-        
-        // Create and publish local tracks
-        console.log('Creating local audio and video tracks');
-        const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-          { encoderConfig: 'standard' },
-          { encoderConfig: { width: 640, height: 480, frameRate: 30 } }
-        );
-        
-        this.localAudioTrack = microphoneTrack;
-        this.localVideoTrack = cameraTrack;
-        
-        console.log('Publishing local tracks to channel');
-        await this.client.publish([microphoneTrack, cameraTrack]);
-        console.log('Local tracks published successfully');
-        
-        this.isJoining = false;
-        return {
-          uid: joinedUid,
-          audioTrack: microphoneTrack,
-          videoTrack: cameraTrack
-        };
-      } catch (joinError) {
-        console.error('Error during join:', joinError);
-        throw joinError;
-      }
+      });
+      
+      this.client.on('user-unpublished', (user, mediaType) => {
+        console.log(`User ${user.uid} unpublished ${mediaType} track`);
+      });
+      
+      this.client.on('user-left', (user) => {
+        console.log(`User ${user.uid} left the channel`);
+        if (onUserLeft && typeof onUserLeft === 'function') {
+          onUserLeft(user);
+        }
+      });
+      
+      // Join the channel
+      const userId = uid || 0; // Use 0 for dynamic assignment
+      await this.client.join(this.appId, channelName, token, userId);
+      console.log('Successfully joined channel:', channelName);
+      
+      // Create and publish tracks
+      const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+      this.localTracks = { audioTrack: microphoneTrack, videoTrack: cameraTrack };
+      
+      await this.client.publish(Object.values(this.localTracks));
+      console.log('Published local tracks');
+      
+      return {
+        uid: this.client.uid,
+        audioTrack: microphoneTrack,
+        videoTrack: cameraTrack
+      };
     } catch (error) {
-      this.isJoining = false;
-      console.error('Error joining Agora channel:', error);
+      console.error('Error joining channel:', error);
       throw error;
     }
   }
