@@ -274,14 +274,17 @@ const VideoConsultation = () => {
 
   // Toggle microphone on/off
   const toggleMic = () => {
-    let newState = !isMicOn;
+    const currentlyMuted = !isMicOn;
+    const targetState = !currentlyMuted; // We want isMicOn to be true when audio is enabled
     
     // Try to toggle Agora audio first
     if (agoraServiceRef.current) {
       try {
-        const result = agoraServiceRef.current.toggleAudio();
-        if (typeof result === 'boolean') {
-          newState = !result; // Use the result from Agora if available
+        // For Agora, true means enabled (unmuted), false means disabled (muted)
+        const tracks = agoraServiceRef.current.localTracks;
+        if (tracks && tracks.audioTrack) {
+          tracks.audioTrack.setEnabled(targetState);
+          console.log(`Agora mic ${targetState ? 'enabled' : 'disabled'}`);
         }
       } catch (err) {
         console.error('Error toggling Agora audio:', err);
@@ -291,11 +294,13 @@ const VideoConsultation = () => {
     // Also toggle WebRTC audio as fallback
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = newState;
+        track.enabled = targetState;
+        console.log(`WebRTC audio track ${targetState ? 'enabled' : 'disabled'}`);
       });
     }
     
-    setIsMicOn(newState);
+    // Update state
+    setIsMicOn(targetState);
   };
 
   // Handle sending messages
@@ -462,12 +467,11 @@ const VideoConsultation = () => {
               {connected ? 'Connected' : 'Connecting...'}
             </span>
           </div>
-          <button 
-            onClick={handleEndConsultation}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm"
-          >
-            End Consultation
-          </button>
+          <div className="text-sm">
+            <span className="font-medium">{appointment?.patient?.name || 'Patient'}</span>
+            <span className="mx-2">•</span>
+            <span>{new Date(appointment?.date).toLocaleDateString()}</span>
+          </div>
         </div>
         
         {/* Main content */}
@@ -531,12 +535,16 @@ const VideoConsultation = () => {
               ref={chatContainerRef}
               className="flex-1 p-4 space-y-4 overflow-y-auto"
             >
-              {!consultationStarted ? (
+              {!connected ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
                     <p className="text-gray-500">Waiting for {currentUser.role === 'doctor' ? 'patient' : 'doctor'} to join...</p>
                   </div>
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">Start your conversation here...</p>
                 </div>
               ) : (
                 messages.map((msg, index) => (
@@ -627,13 +635,14 @@ const VideoConsultation = () => {
             </button>
           )}
           
+          {/* Replace End Consultation with Return to Appointments button */}
           <button
-            onClick={handleEndConsultation}
-            className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 transition-all duration-200 flex items-center justify-center"
-            title="End Consultation"
+            onClick={() => navigate(currentUser.role === 'doctor' ? `/doctor/appointments/${id}` : `/appointments/${id}`)}
+            className="bg-blue-600 text-white p-3 rounded-full hover:bg-blue-700 transition-all duration-200 flex items-center justify-center"
+            title="Return to Appointments"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
         </div>

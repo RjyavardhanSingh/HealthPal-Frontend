@@ -153,14 +153,10 @@ class AgoraService {
   toggleVideo() {
     if (this.localTracks && this.localTracks.videoTrack) {
       const videoTrack = this.localTracks.videoTrack;
-      if (videoTrack.enabled) {
-        videoTrack.setEnabled(false);
-        console.log('[AGORA] Video disabled');
-      } else {
-        videoTrack.setEnabled(true);
-        console.log('[AGORA] Video enabled');
-      }
-      return !videoTrack.enabled; // Return the new state
+      const newState = !videoTrack.enabled;
+      videoTrack.setEnabled(newState);
+      console.log('[AGORA] Video track enabled:', newState);
+      return newState; // Return the new state
     }
     return false;
   }
@@ -168,14 +164,10 @@ class AgoraService {
   toggleAudio() {
     if (this.localTracks && this.localTracks.audioTrack) {
       const audioTrack = this.localTracks.audioTrack;
-      if (audioTrack.enabled) {
-        audioTrack.setEnabled(false);
-        console.log('[AGORA] Audio disabled');
-      } else {
-        audioTrack.setEnabled(true);
-        console.log('[AGORA] Audio enabled');
-      }
-      return !audioTrack.enabled; // Return the new state
+      const newState = !audioTrack.enabled;
+      audioTrack.setEnabled(newState);
+      console.log('[AGORA] Audio track enabled:', newState);
+      return newState; // Return the new state
     }
     return false;
   }
