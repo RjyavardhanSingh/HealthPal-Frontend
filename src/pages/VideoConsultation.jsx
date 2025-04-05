@@ -105,94 +105,57 @@ const VideoConsultation = () => {
         
         // Join socket room for chat
         socketService.joinConsultation(id);
+        console.log('Joined socket consultation for appointment:', id);
         
         // Generate channel name consistently
         const channelName = `healthpal_${id}`;
         console.log('Using channel name:', channelName);
         
-        // Request token from server
-        const tokenResponse = await api.video.getToken({
-          channelName,
-          uid: 0, // Use 0 for dynamic assignment
-          role: 'publisher'
-        });
-        
-        if (!tokenResponse?.data?.token) {
-          throw new Error('Failed to get token from server');
-        }
-        
-        const { token } = tokenResponse.data;
-        console.log('Received token successfully');
-        
-        // Initialize Agora client
-        const { default: agoraService } = await import('../services/agoraService');
-        agoraServiceRef.current = agoraService;
-        
-        // Important: Clear any previous event handlers
-        await agoraService.resetClient();
-        
-        // Wait for DOM to be fully ready
-        setTimeout(async () => {
-          if (!isMounted) return;
+        try {
+          // Request token from server
+          const tokenResponse = await api.video.getToken({
+            channelName,
+            uid: 0,
+            role: 'publisher'
+          });
           
-          try {
-            console.log('Joining Agora channel:', channelName);
-            
-            // Set up handlers before joining
-            agoraService.client.on('user-published', async (user, mediaType) => {
-              console.log(`Remote user ${user.uid} published ${mediaType} track`);
-              
-              try {
-                // Subscribe to the track
-                await agoraService.client.subscribe(user, mediaType);
-                console.log(`Subscribed to ${mediaType} track from user ${user.uid}`);
-                
-                if (mediaType === 'video') {
-                  // Ensure DOM elements are ready
-                  setTimeout(() => {
-                    const remoteContainer = document.getElementById('remote-video-container');
-                    if (remoteContainer) {
-                      console.log('Playing remote video in container');
-                      user.videoTrack.play(remoteContainer);
-                      setConnected(true);
-                    } else {
-                      console.error('Remote container not found');
-                    }
-                  }, 500);
-                }
-                
-                if (mediaType === 'audio') {
-                  user.audioTrack.play();
-                }
-              } catch (err) {
-                console.error(`Error handling published ${mediaType}:`, err);
-              }
-            });
-            
-            // Join the channel
-            const { localAudioTrack, localVideoTrack } = await agoraService.joinChannel(
-              channelName,
-              token
-            );
-            
-            // Keep track of local tracks
-            if (localVideoTrack) {
-              console.log('Got local video track, playing');
-              const localContainer = document.getElementById('local-video-container');
-              if (localContainer) {
-                localVideoTrack.play(localContainer);
-              }
-            } else {
-              console.warn('No local video track from Agora');
-              initializeMedia();
-            }
-            
-          } catch (agoraErr) {
-            console.error('Agora initialization error:', agoraErr);
-            initializeMedia(); // Fallback to standard WebRTC
+          if (!tokenResponse?.data?.token) {
+            throw new Error('Failed to get token from server');
           }
-        }, 1000);
-        
+          
+          const { token } = tokenResponse.data;
+          console.log('Received token successfully');
+          
+          // Initialize Agora client
+          const { default: agoraService } = await import('../services/agoraService');
+          agoraServiceRef.current = agoraService;
+          
+          // Reset client to ensure clean state
+          await agoraService.resetClient();
+          
+          // Initialize client with event handlers
+          await agoraService.initialize();
+          
+          // Join the channel with a slight delay to ensure initialization is complete
+          setTimeout(async () => {
+            if (!isMounted) return;
+            
+            try {
+              // Join the channel
+              const tracks = await agoraService.joinChannel(channelName, token);
+              console.log('Successfully joined Agora channel with tracks:', tracks);
+              
+              // Set connected state
+              setConnected(true);
+            } catch (joinError) {
+              console.error('Error joining Agora channel:', joinError);
+              initializeMedia(); // Fall back to regular WebRTC
+            }
+          }, 1000);
+        } catch (agoraError) {
+          console.error('Error setting up Agora:', agoraError);
+          initializeMedia(); // Fall back to regular WebRTC
+        }
       } catch (err) {
         if (isMounted) {
           console.error('Error setting up video call:', err);
@@ -411,11 +374,12 @@ const VideoConsultation = () => {
 
   const handleReconnect = () => {
     setReconnecting(true);
+    toast.info("Reconnecting to video call...");
     
     // Clean up existing connections
     if (agoraServiceRef.current) {
       agoraServiceRef.current.leaveChannel().catch(err => {
-        console.error('Error leaving channel during reconnect:', err);
+        console.error('Error leaving Agora channel during reconnect:', err);
       });
     }
     
@@ -424,7 +388,7 @@ const VideoConsultation = () => {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
     
-    // Reinitialize with a slight delay
+    // Force window reload to reinitialize everything
     setTimeout(() => {
       window.location.reload();
     }, 1000);
