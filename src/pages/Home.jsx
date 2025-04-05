@@ -7,6 +7,7 @@ import { auth } from "../config/firebase"
 import api from "../services/api"
 import { fetchNYTimesArticles, mockHealthArticles } from "../utils/externalApi"
 import NotificationPrompt from "../components/notifications/NotificationPrompt"
+import LoadingSpinner from "../components/common/LoadingSpinner"
 
 // SVG icons as components
 const calendarIcon = (
@@ -678,6 +679,14 @@ const Home = () => {
       {/* Add custom styles */}
       <style>{customStyles}</style>
 
+      {/* Add full-page loading spinner while data is being fetched */}
+      {(loading || isLoading) && !contentLoaded ? (
+        <div className="fixed inset-0 bg-white bg-opacity-80 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-gray-600 font-medium">Loading your health dashboard...</p>
+        </div>
+      ) : null}
+
       {/* Notification Prompt */}
       {!notificationPermissionRequested && (
         <div className="animate-slide-up">
@@ -839,8 +848,16 @@ const Home = () => {
                           <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md mb-2">
                             {formatAppointmentDate(appointment.date)}
                           </span>
-                          <h3 className="font-medium text-gray-800 text-lg">{appointment.doctorName || "Dr. Unknown"}</h3>
-                          <p className="text-blue-600 text-sm">{appointment.specialization || "General Checkup"}</p>
+                          <h3 className="font-medium text-gray-800 text-lg">
+                            {appointment.doctor && appointment.doctor.name 
+                              ? `Dr. ${appointment.doctor.name}` 
+                              : "Your Healthcare Provider"}
+                          </h3>
+                          <p className="text-blue-600 text-sm">
+                            {appointment.doctor && appointment.doctor.specialization
+                              ? appointment.doctor.specialization
+                              : "General Checkup"}
+                          </p>
                         </div>
                         <div className="text-right">
                           <span className="text-gray-500 text-sm">{formatAppointmentTime(appointment.date)}</span>

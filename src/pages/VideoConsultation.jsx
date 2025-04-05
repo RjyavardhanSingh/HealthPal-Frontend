@@ -8,6 +8,52 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import PrescriptionForm from '../components/prescription/PrescriptionForm';
 import ReviewDialog from '../components/review/ReviewDialog';
 
+// Helper function to attempt video play with multiple approaches
+const attemptVideoPlay = (videoElement) => {
+  if (!videoElement) return false;
+  
+  console.log('Attempting to play video with multiple methods');
+  
+  // Try standard play
+  videoElement.play().catch(err => {
+    console.log('Standard play failed, trying alternatives', err);
+    
+    // Try with user interaction trigger
+    document.addEventListener('click', function playOnClick() {
+      videoElement.play().catch(e => console.error('Click play failed:', e));
+      document.removeEventListener('click', playOnClick);
+    }, { once: true });
+    
+    // Try with muted first (browsers are more permissive with muted videos)
+    videoElement.muted = true;
+    videoElement.play().then(() => {
+      console.log('Play succeeded with mute, now attempting unmute');
+      // If muted play works, try to unmute after user interaction
+      document.addEventListener('click', function unmuteOnClick() {
+        videoElement.muted = false;
+        document.removeEventListener('click', unmuteOnClick);
+      }, { once: true });
+    }).catch(e => console.error('Even muted play failed:', e));
+  });
+};
+
+const checkPermissions = async () => {
+  try {
+    // Check if permissions API is available
+    if (navigator.permissions) {
+      const cameraPermission = await navigator.permissions.query({ name: 'camera' });
+      console.log('Camera permission state:', cameraPermission.state);
+      
+      if (cameraPermission.state === 'denied') {
+        toast.error('Camera access is blocked. Please update your browser settings.');
+        setError('Camera permission denied. Please enable camera access in your browser settings.');
+      }
+    }
+  } catch (err) {
+    console.log('Permission check not supported');
+  }
+};
+
 const VideoConsultation = () => {
   const params = useParams();
   const navigate = useNavigate();
@@ -15,7 +61,6 @@ const VideoConsultation = () => {
   
   const id = params.appointmentId || params.id;
   
-  console.log('VideoConsultation params:', params);
   console.log('VideoConsultation rendering with ID:', id);
   
   const [appointment, setAppointment] = useState(null);
@@ -39,29 +84,48 @@ const VideoConsultation = () => {
   const localVideoRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const agoraServiceRef = useRef(null);
   
+  // Fetch appointment and initialize video call
   useEffect(() => {
     let isMounted = true;
     let removeListener = null;
+
+    checkPermissions();
     
     const fetchAppointment = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        console.log('Fetching appointment details for video call, ID:', id);
+        console.log('Fetching appointment for video call:', id);
         const appointmentResponse = await api.appointments.getById(id);
+        if (!isMounted) return;
         setAppointment(appointmentResponse.data.data);
         
-        // Initialize Agora service
-        const agoraService = await import('../services/agoraService').then(m => m.default);
+        // Mark the appointment as started
+        if (!appointmentResponse.data.data.consultationStarted) {
+          try {
+            await api.appointments.updateStatus(id, 'in-progress');
+            setConsultationStarted(true);
+          } catch (updateErr) {
+            console.error('Error updating appointment status:', updateErr);
+            // Continue anyway - non-critical error
+          }
+        } else {
+          setConsultationStarted(true);
+        }
         
+        // Initialize Agora service
         try {
+          const agoraModule = await import('../services/agoraService');
+          const agoraService = agoraModule.default;
+          
           // Generate proper channel name
           const channelName = `healthpal_${id}`;
           console.log(`Using channel name: ${channelName}`);
           
-          // Add error handling around token request
+          // Request token
           console.log('Requesting Agora token');
           const tokenResponse = await api.video.getToken({
             channelName,
@@ -69,71 +133,88 @@ const VideoConsultation = () => {
             role: 'publisher'
           });
           
-          console.log('Token response:', tokenResponse.data);
+          console.log('Token response received');
           
           if (tokenResponse?.data?.token) {
             const { token } = tokenResponse.data;
             
             // Join the channel with the token
-            console.log('Joining channel with token');
-            const localUser = await agoraService.joinChannel(
-              channelName, 
-              token, 
-              null,
-              (user) => {
-                console.log('Remote user joined with video', user);
-                setConnected(true);
-              },
-              (user) => {
-                console.log('Remote user left', user);
+            console.log('Joining Agora channel');
+            
+            // Wait for DOM to be ready
+            setTimeout(async () => {
+              try {
+                if (!isMounted) return;
+                
+                const localUser = await agoraService.joinChannel(
+                  channelName, 
+                  token, 
+                  null,
+                  (user) => {
+                    console.log('Remote user joined:', user.uid);
+                    if (!isMounted) return;
+                    
+                    setConnected(true);
+                    
+                    // Play remote video
+                    if (user.videoTrack) {
+                      console.log('Playing remote video');
+                      const remoteContainer = document.getElementById('remote-video-container');
+                      if (remoteContainer) {
+                        user.videoTrack.play(remoteContainer);
+                      }
+                    }
+                  },
+                  (user) => {
+                    console.log('Remote user left:', user.uid);
+                  }
+                );
+                
+                console.log('Joined Agora channel successfully');
+                
+                // Play local video track
+                if (localUser && localUser.videoTrack) {
+                  console.log('Playing local video track');
+                  const localContainer = document.getElementById('local-video-container');
+                  if (localContainer) {
+                    localUser.videoTrack.play(localContainer);
+                  }
+                }
+                
+                // Standard WebRTC as fallback
+                if (!localUser || !localUser.videoTrack) {
+                  initializeMedia();
+                }
+                
+              } catch (agoraErr) {
+                console.error('Error in Agora setup:', agoraErr);
+                // Fallback to standard WebRTC
+                initializeMedia();
               }
-            );
+            }, 500);
             
-            console.log('Local user initialized:', localUser);
-            
-            // Play local video in container
-            if (localUser && localUser.videoTrack) {
-              console.log('Playing local video track');
-              localUser.videoTrack.play('local-video-container');
-            }
-            
-            // Also set up traditional camera access as fallback
-            try {
-              const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: true, 
-                audio: true 
-              });
-              
-              mediaStreamRef.current = stream;
-              setLocalStream(stream);
-              
-              // If Agora local video doesn't show, we can use this
-              if (localVideoRef.current) {
-                localVideoRef.current.srcObject = stream;
-              }
-              
-              setConnected(true);
-            } catch (mediaError) {
-              console.error('Error accessing media devices:', mediaError);
-            }
           } else {
             throw new Error('Invalid token received from server');
           }
         } catch (tokenError) {
           console.error('Token error:', tokenError);
           setError(`Failed to initialize video call: ${tokenError.message}`);
+          // Fallback
+          initializeMedia();
         }
       } catch (err) {
-        console.error('Error fetching appointment:', err);
-        setError(`Failed to initialize video call: ${err.message}`);
+        if (isMounted) {
+          console.error('Error fetching appointment:', err);
+          setError(`Failed to initialize video call: ${err.message}`);
+          initializeMedia();
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
-    // Register message callback
+    // Register socket message handler
     removeListener = socketService.onMessageReceived((message) => {
-      console.log('Message received in component:', message);
       if (isMounted) {
         setMessages(prevMessages => {
           if (message.id && prevMessages.some(m => m.id === message.id)) {
@@ -150,53 +231,136 @@ const VideoConsultation = () => {
       }
     });
 
+    // Join the socket consultation
+    socketService.joinConsultation(id);
+
+    // Add system message when joining
+    const joinMessage = {
+      sender: 'system',
+      text: `${currentUser.role === 'doctor' ? 'Doctor' : 'Patient'} joined the consultation`,
+      id: 'system-join-' + Date.now()
+    };
+    socketService.sendMessage(id, joinMessage);
+    
+    // Start the call
     fetchAppointment();
     
-    // Improved cleanup function
+    // Cleanup function
     return () => {
       isMounted = false;
       if (removeListener) removeListener();
       
-      // Clean up socket connection
+      // Clean up socket connection - only need disconnect
       socketService.disconnect();
       
       // Clean up media streams
       if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        console.log('Stopping all media tracks');
+        mediaStreamRef.current.getTracks().forEach(track => {
+          console.log(`Stopping ${track.kind} track`);
+          track.stop();
+        });
+        mediaStreamRef.current = null;
       }
       
-      // Import and use agoraService to properly leave the channel
-      import('../services/agoraService').then(module => {
-        const agoraService = module.default;
-        agoraService.leaveChannel().catch(err => {
-          console.error('Error leaving Agora channel during cleanup:', err);
+      // Clear video srcObject
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      
+      // Leave Agora channel if initialized
+      if (agoraServiceRef.current) {
+        agoraServiceRef.current.leaveChannel().catch(err => {
+          console.error('Error leaving Agora channel:', err);
         });
-      });
+      }
     };
   }, [id, currentUser.role]);
 
-  // Initialize camera and microphone
+  // Initialize regular WebRTC media (fallback)
   const initializeMedia = async () => {
     try {
-      // Get user media (camera and microphone)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
-      });
+      console.log('Initializing WebRTC media with direct camera capture');
       
+      // Define exact constraints to eliminate ambiguity
+      const constraints = {
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user",
+          frameRate: { ideal: 30 }
+        },
+        audio: true
+      };
+      
+      console.log('Requesting media with constraints:', constraints);
+      
+      // Request media with clear error handling
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+        .catch(err => {
+          console.error('getUserMedia error:', err.name, err.message);
+          if (err.name === 'NotAllowedError') {
+            toast.error('Camera access denied. Please check your browser permissions.');
+            throw new Error('Camera permission denied. Please enable camera access and refresh the page.');
+          } else if (err.name === 'NotFoundError') {
+            toast.error('No camera detected. Please connect a camera and refresh.');
+            throw new Error('No camera found. Please connect a camera and try again.');
+          } else {
+            throw err;
+          }
+        });
+      
+      // Successfully got stream
+      console.log('Stream obtained successfully. Tracks:', stream.getTracks().map(t => t.kind));
+      
+      // Save stream reference
       mediaStreamRef.current = stream;
       setLocalStream(stream);
       
-      // Display local video
+      // Handle video element directly and immediately
       if (localVideoRef.current) {
+        console.log('Setting stream to video element');
+        
+        // Ensure video tracks are enabled
+        stream.getVideoTracks().forEach(track => {
+          track.enabled = true;
+          console.log('Video track enabled:', track.label, 'active:', track.enabled);
+        });
+        
+        // Set stream to video element
         localVideoRef.current.srcObject = stream;
+        
+        // Force play with direct user action trigger
+        const playPromise = localVideoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error('Video play error:', error);
+            
+            // Add visible play button for user interaction
+            const playButton = document.createElement('button');
+            playButton.innerText = 'Start Camera';
+            playButton.className = 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-primary-600 text-white px-4 py-2 rounded-md z-50';
+            
+            playButton.onclick = () => {
+              localVideoRef.current.play();
+              playButton.remove();
+            };
+            
+            const container = document.getElementById('local-video-container');
+            if (container) {
+              container.appendChild(playButton);
+            }
+          });
+        }
+      } else {
+        console.error('Failed to find video element reference');
       }
       
-      toast.success('Camera and microphone connected successfully');
+      setConnected(true);
+      console.log('Local media initialized successfully');
     } catch (err) {
-      console.error('Error accessing media devices:', err);
-      toast.error('Failed to access camera or microphone. Please check your device permissions.');
-      setError('Could not access camera or microphone. Please check your device permissions and try again.');
+      console.error('Camera initialization error:', err);
+      setError(`Camera access failed: ${err.message}`);
     }
   };
 
@@ -208,6 +372,11 @@ const VideoConsultation = () => {
       });
       setIsCameraOn(!isCameraOn);
     }
+    
+    // Also toggle Agora video if available
+    if (agoraServiceRef.current) {
+      agoraServiceRef.current.toggleVideo();
+    }
   };
 
   // Toggle microphone on/off
@@ -217,6 +386,11 @@ const VideoConsultation = () => {
         track.enabled = !track.enabled;
       });
       setIsMicOn(!isMicOn);
+    }
+    
+    // Also toggle Agora audio if available
+    if (agoraServiceRef.current) {
+      agoraServiceRef.current.toggleMute();
     }
   };
 
@@ -242,12 +416,17 @@ const VideoConsultation = () => {
     }, 100);
   };
 
-  // End consultation handler remains largely the same
+  // End consultation handler
   const handleEndConsultation = async () => {
     try {
       // Stop media tracks
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      
+      // Leave Agora channel
+      if (agoraServiceRef.current) {
+        await agoraServiceRef.current.leaveChannel();
       }
       
       if (currentUser.role === 'doctor') {
@@ -364,11 +543,8 @@ const VideoConsultation = () => {
           {/* Video area */}
           <div className="md:col-span-2">
             <div className="aspect-video bg-gray-800 rounded-lg mb-4 relative overflow-hidden">
-              {/* Remote video container - add ID attribute */}
+              {/* Remote video container */}
               <div id="remote-video-container" className="w-full h-full">
-                {/* Assign unique ID for each possible remote user */}
-                <div id="remote-video-0" className="w-full h-full"></div>
-                
                 {!connected && (
                   <div className="text-gray-400 text-center flex flex-col items-center justify-center h-full">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -379,11 +555,32 @@ const VideoConsultation = () => {
                 )}
               </div>
               
-              {/* Local video miniature - add ID attribute */}
-              {localStream && (
-                <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 border-2 border-white rounded overflow-hidden">
-                  <div id="local-video-container" className="w-full h-full"></div>
+              {/* Local video miniature */}
+              <div className="absolute bottom-4 right-4 w-1/4 h-1/4 bg-gray-900 border-2 border-white rounded overflow-hidden">
+                <div id="local-video-container" className="w-full h-full">
+                  <video 
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ 
+                      backgroundColor: "#000",
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover"
+                    }}
+                    onLoadedMetadata={() => console.log('Video metadata loaded')}
+                    onCanPlay={() => console.log('Video can play now')}
+                  ></video>
                 </div>
+              </div>
+              {!localStream && (
+                <button
+                  onClick={() => initializeMedia()}
+                  className="absolute bottom-2 left-2 bg-blue-600 text-white px-2 py-1 text-xs rounded"
+                >
+                  Retry Camera
+                </button>
               )}
             </div>
             
@@ -416,7 +613,7 @@ const VideoConsultation = () => {
               ) : (
                 messages.map((msg, index) => (
                   <div 
-                    key={index} 
+                    key={msg.id || index} 
                     className={`flex ${msg.sender === currentUser.role ? 'justify-end' : 'justify-start'}`}
                   >
                     <div 
@@ -453,7 +650,9 @@ const VideoConsultation = () => {
           </div>
         </div>
       </div>
-      <div className="absolute bottom-4 left-4 right-4 z-10 flex justify-between">
+
+      {/* Control buttons */}
+      <div className="fixed bottom-4 left-4 right-4 z-10 flex justify-between">
         <div className="flex space-x-2">
           <button
             onClick={toggleCamera}
@@ -492,18 +691,16 @@ const VideoConsultation = () => {
           {currentUser.role === 'doctor' && (
             <button
               onClick={() => setShowPrescriptionModal(true)}
-              className="p-2 bg-green-600 text-white rounded-full hover:bg-green-700"
-              title="Add Prescription"
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              Write Prescription
             </button>
           )}
-          {/* Existing end call button */}
         </div>
       </div>
-      {showPrescriptionModal && consultationId && (
+
+      {/* Prescription Modal */}
+      {showPrescriptionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-4">Write Prescription</h2>
@@ -520,6 +717,7 @@ const VideoConsultation = () => {
           </div>
         </div>
       )}
+      
       {/* Review Dialog */}
       {showReviewDialog && (
         <ReviewDialog

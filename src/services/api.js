@@ -324,7 +324,15 @@ const api = {
     register: (userData) => instance.post('/auth/register', userData),
     registerGoogle: (userData) => instance.post('/auth/register-google', userData),
     login: (credentials) => instance.post('/auth/login', credentials),
-    verifyToken: () => instance.get('/auth/verify'),
+    verifyToken: async () => {
+      try {
+        const response = await instance.get('/auth/verify');
+        return response;
+      } catch (error) {
+        console.error('Token verification error:', error);
+        throw error;
+      }
+    },
     getMe: () => instance.get('/auth/me'),
     updateProfile: (data) => instance.put('/auth/profile', data),
     updatePassword: (currentPassword, newPassword) => 

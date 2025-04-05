@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -51,33 +51,46 @@ const App = () => {
   useEffect(() => {
     const validateToken = async () => {
       try {
+        setValidatingToken(true);
         const token = localStorage.getItem('authToken');
+        const savedUser = localStorage.getItem('currentUser');
         
-        if (!token) {
-          // No token, clear any auth state
+        if (!token || !savedUser) {
+          // No token or user data, clear any partial auth state
+          localStorage.removeItem('authToken');
           localStorage.removeItem('currentUser');
           setValidatingToken(false);
           return;
         }
         
-        // Optional: Verify token with server
+        // Set API auth header
+        api.setAuthToken(token);
+        
         try {
-          const response = await fetch('http://localhost:5000/api/auth/verify', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
+          // Use the API service instead of raw fetch, and the proper URL from env vars
+          const response = await api.auth.verifyToken();
           
-          if (!response.ok) {
-            // Invalid token, clear auth state
+          if (response.data && response.data.success) {
+            console.log('Token validated successfully');
+            // Don't need to do anything - auth context will load from localStorage
+          } else {
+            console.warn('Token validation failed with response:', response);
+            // Only clear if we get an explicit invalid token response
             localStorage.removeItem('authToken');
             localStorage.removeItem('currentUser');
           }
         } catch (error) {
           console.error('Token validation error:', error);
-          // On error, assume token is invalid
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('currentUser');
+          
+          // Only clear auth state for auth-specific errors
+          if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            console.warn('Auth error, clearing credentials');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+          } else {
+            // For network errors or other issues, keep credentials
+            console.log('Non-auth error, preserving credentials');
+          }
         }
       } finally {
         setValidatingToken(false);
@@ -106,7 +119,9 @@ const App = () => {
 const AppContent = () => {
   const auth = useAuth();
   const [forceLoaded, setForceLoaded] = useState(false);
-  
+  const navigate = useNavigate();
+  const location = useLocation();
+
   if (!auth) {
     return <LoadingSpinner />;
   }
@@ -120,17 +135,20 @@ const AppContent = () => {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
+  // Log auth state on changes
   useEffect(() => {
-    // Debug logging for auth state
     if (currentUser) {
-      console.log('Current authenticated user:', {
-        id: currentUser._id,
-        name: currentUser.name || currentUser.displayName,
-        email: currentUser.email,
-        role: currentUser.role
-      });
+      console.log('Auth state initialized. User role:', currentUser.role);
+    } else if (!isLoading) {
+      console.log('No authenticated user found');
+      
+      // Don't redirect to login if already on login or public pages
+      const publicPaths = ['/login', '/register', '/landing', '/forgot-password'];
+      if (!publicPaths.some(path => location.pathname.startsWith(path))) {
+        console.log('Redirecting to login from:', location.pathname);
+      }
     }
-  }, [currentUser]);
+  }, [currentUser, isLoading, location.pathname]);
 
   if (isLoading && !forceLoaded) {
     return (

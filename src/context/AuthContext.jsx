@@ -16,17 +16,51 @@ export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Load saved auth state from localStorage
+  // Update the AuthProvider component's useEffect
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('currentUser');
+    const loadSavedAuthState = async () => {
+      try {
+        setLoading(true);
+        
+        const token = localStorage.getItem('authToken');
+        const savedUserJson = localStorage.getItem('currentUser');
+        
+        if (!token || !savedUserJson) {
+          setLoading(false);
+          return;
+        }
+        
+        // Set the API token
+        api.setAuthToken(token);
+        
+        // Parse and validate saved user data
+        try {
+          const savedUser = JSON.parse(savedUserJson);
+          
+          if (!savedUser || !savedUser.role) {
+            console.error('Saved user data is invalid', savedUser);
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('authToken');
+            setLoading(false);
+            return;
+          }
+          
+          console.log('Restoring auth state for user role:', savedUser.role);
+          
+          // Set the auth context state
+          setUserToken(token);
+          setCurrentUser(savedUser);
+        } catch (parseError) {
+          console.error('Failed to parse saved user data', parseError);
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('authToken');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    if (token && savedUser) {
-      setUserToken(token);
-      setCurrentUser(JSON.parse(savedUser));
-    }
-    
-    setLoading(false);
+    loadSavedAuthState();
   }, []);
 
   // Add the signup function
