@@ -74,9 +74,6 @@ const VideoConsultation = () => {
   const [consultationId, setConsultationId] = useState(null);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [reviewRating, setReviewRating] = useState(5); // Default to 5 stars
-  const [reviewComment, setReviewComment] = useState('');
 
   // Media stream states
   const [localStream, setLocalStream] = useState(null);
@@ -358,19 +355,23 @@ const VideoConsultation = () => {
           mediaStreamRef.current.getTracks().forEach(track => track.stop());
         }
 
-        // Update appointment status if needed
+        // If doctor is ending the consultation, mark it as completed
         if (currentUser.role === 'doctor') {
           try {
             await api.appointments.update(id, { status: 'completed' });
             console.log('Appointment marked as completed');
+            // Doctors don't need to review patients, so just navigate back
+            navigate('/doctor/appointments');
+            toast.success('Consultation completed successfully');
           } catch (updateErr) {
             console.error('Error updating appointment status:', updateErr);
-            // Continue execution - we still want to show the review dialog
+            toast.error('There was an issue updating the appointment status');
+            navigate('/doctor/appointments');
           }
+        } else {
+          // For patients, show the review dialog
+          setShowReviewDialog(true);
         }
-
-        // Show review dialog
-        setShowReviewModal(true);
 
       } catch (error) {
         console.error('Error ending consultation:', error);
@@ -385,13 +386,9 @@ const VideoConsultation = () => {
   const handleReviewClose = (reviewed) => {
     setShowReviewDialog(false);
 
-    // Use role-based path
-    const appointmentPath = currentUser.role === 'doctor'
-      ? `/doctor/appointments/${id}`
-      : `/appointments/${id}`;
-
-    navigate(appointmentPath);
-
+    // Navigate back to appointments page
+    navigate('/appointments');
+    
     if (reviewed) {
       toast.success('Thank you for your feedback!');
     }
@@ -701,99 +698,13 @@ const VideoConsultation = () => {
       )}
 
       {/* Review Dialog */}
-      {showReviewDialog && (
+      {showReviewDialog && appointment && (
         <ReviewDialog
           doctorId={appointment.doctor._id}
           doctorName={appointment.doctor.name}
-          appointmentId={appointment._id}
+          appointmentId={id}
           onClose={handleReviewClose}
         />
-      )}
-
-      {/* Review Modal */}
-      {showReviewModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-4">How was your consultation?</h3>
-            <p className="text-gray-600 mb-6">Please rate your experience and provide any feedback.</p>
-            
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-2">Rating</label>
-              <div className="flex space-x-2">
-                {[1, 2, 3, 4, 5].map((rating) => (
-                  <button
-                    key={rating}
-                    className={`w-10 h-10 rounded-full ${reviewRating >= rating ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-600'}`}
-                    onClick={() => setReviewRating(rating)}
-                  >
-                    {rating}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="mb-6">
-              <label className="block text-gray-700 mb-2">Comments</label>
-              <textarea
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                rows="4"
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Share your experience (optional)"
-              ></textarea>
-            </div>
-            
-            <div className="flex justify-end space-x-3">
-              <button
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
-                onClick={() => {
-                  setShowReviewModal(false);
-                  navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
-                }}
-              >
-                Skip
-              </button>
-              <button
-                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-                onClick={async () => {
-                  try {
-                    // Submit review if rating provided
-                    if (reviewRating > 0 && appointment) {
-                      if (currentUser.role === 'doctor') {
-                        // For doctors reviewing patients
-                        await api.reviews.create({
-                          reviewedId: appointment.patient._id,
-                          appointmentId: id,
-                          rating: reviewRating,
-                          comment: reviewComment
-                        });
-                      } else {
-                        // For patients reviewing doctors
-                        await api.reviews.create({
-                          reviewedId: appointment.doctor._id,
-                          appointmentId: id,
-                          rating: reviewRating,
-                          comment: reviewComment
-                        });
-                      }
-                      
-                      toast.success('Thank you for your feedback!');
-                    }
-                    
-                    // Navigate back to appointments
-                    navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
-                  } catch (error) {
-                    console.error('Error submitting review:', error);
-                    toast.error('Failed to submit review. Returning to appointments...');
-                    navigate(currentUser.role === 'doctor' ? '/doctor/appointments' : '/appointments');
-                  }
-                }}
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
