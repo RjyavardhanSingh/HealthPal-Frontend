@@ -98,10 +98,10 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // Attempt login
+      // Attempt login - this will show a success toast from AuthContext.jsx if successful
       const response = await login(email, password);
       
-      // Handle cases where the account was created with social login
+      // Handle social login case
       if (response.useSocialLogin) {
         setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
         toast.info('Please use Google Sign-In for this account', {
@@ -110,10 +110,7 @@ const Login = () => {
         return;
       }
       
-      // Normal login flow - success is handled in AuthContext
-      // No need to show a toast here as it's already shown in AuthContext.jsx
-      
-      // Check verification status for doctors
+      // If we get here, login was successful and we should navigate based on role
       if (response.pendingVerification) {
         navigate('/doctor/pending-verification');
       } else {
@@ -126,11 +123,10 @@ const Login = () => {
           navigate('/home');
         }
       }
-      
     } catch (error) {
-      // This block should only run for actual errors
       console.error('Login error:', error);
       
+      // Handle different types of errors
       if (error.response?.data?.message) {
         setError(error.response.data.message);
       } else if (error.message) {
@@ -139,7 +135,7 @@ const Login = () => {
         setError('Failed to log in. Please try again.');
       }
       
-      // Only show error toast for actual errors
+      // Only show the error toast when there's actually an error
       toast.error('Login failed');
     } finally {
       setLoading(false);
