@@ -494,17 +494,15 @@ const api = {
         
         if (response.data && response.data.token) {
           console.log('Admin login successful');
-          setAuthToken(response.data.token);
+          // Store the token and set auth header
+          localStorage.setItem('authToken', response.data.token);
+          localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+          instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
         }
         
         return response;
       } catch (error) {
         console.error('Admin authentication error:', error);
-        
-        if (error.response) {
-          console.error('Server responded with:', error.response.status, error.response.data);
-        }
-        
         throw error;
       }
     },
