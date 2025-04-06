@@ -12,6 +12,7 @@ import DoctorRoute from './components/auth/DoctorRoute';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import Notifications from './pages/Notifications';
+import AppInit from './components/AppInit';
 
 // Import pages
 import Login from './pages/auth/Login';
@@ -94,14 +95,16 @@ const App = () => {
   }
 
   return (
-    <Router>
-      <ErrorBoundary>
-        <AuthProvider>
-          <AppContent />
-          <ToastContainer position="top-right" autoClose={5000} />
-        </AuthProvider>
-      </ErrorBoundary>
-    </Router>
+    <AuthProvider>
+      <AppInit>
+        <Router>
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
+        </Router>
+        <ToastContainer position="top-right" autoClose={5000} />
+      </AppInit>
+    </AuthProvider>
   );
 };
 

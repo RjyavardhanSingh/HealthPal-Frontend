@@ -77,32 +77,51 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Update the login function
+  // Update the login function in AuthContext
   const login = async (email, password) => {
     try {
       setAuthError(null);
       setIsLoading(true);
       
       console.log('Attempting login with:', email);
+      
+      // Clear any existing auth data
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('currentUser');
+      api.setAuthToken(null);
+      
+      // Make the login request
       const response = await api.auth.login(email, password);
       
-      console.log('Login response:', response.data);
+      console.log('Login response status:', response.status);
       
-      if (response.data && response.data.success) {
-        // IMPORTANT FIX: Store with consistent key names
-        localStorage.setItem('authToken', response.data.token); // Use authToken not token
+      if (response.data.success) {
+        // Special case: Account created with social login
+        if (response.data.useSocialLogin) {
+          // We'll return a special object to indicate social login required
+          return {
+            success: false,
+            useSocialLogin: true,
+            message: response.data.message
+          };
+        }
+        
+        // Normal login success
+        localStorage.setItem('authToken', response.data.token);
         localStorage.setItem('currentUser', JSON.stringify(response.data.user));
         
-        // Update API authorization header
+        // Set auth header for API requests
         api.setAuthToken(response.data.token);
         
-        // Update context state
+        // Update context
         setUserToken(response.data.token);
         setCurrentUser(response.data.user);
         
-        // Check verification status for doctors
-        const isPending = response.data.user.role === 'doctor' && 
-                          response.data.user.verificationStatus !== 'approved';
+        // Check if doctor is pending verification
+        const isPending = 
+          response.data.user.role === 'doctor' && 
+          response.data.user.verificationStatus !== 'approved';
+        
         setIsPendingVerification(isPending);
         
         return {

@@ -98,14 +98,26 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      console.log('Attempting login with email:', email);
+      // Attempt login
       const response = await login(email, password);
       
+      // Handle cases where the account was created with social login
+      if (response.useSocialLogin) {
+        setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
+        // Show a more prominent message
+        toast.info('Please use Google Sign-In for this account', {
+          autoClose: 7000 // Keep it visible longer
+        });
+        return;
+      }
+      
+      // Normal login flow
       if (response.success) {
-        // Now navigate based on user role and verification status
+        // Check verification status for doctors
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
         } else {
+          // Navigate based on role
           if (currentUser.role === 'doctor') {
             navigate('/doctor/dashboard');
           } else if (currentUser.role === 'admin') {
@@ -117,8 +129,17 @@ const Login = () => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError(error.message || 'Failed to log in');
-      toast.error(error.response?.data?.message || error.message || 'Login failed');
+      
+      // Handle different types of errors
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.message) {
+        setError(error.message);
+      } else {
+        setError('Failed to log in. Please try again.');
+      }
+      
+      toast.error('Login failed');
     } finally {
       setLoading(false);
     }
