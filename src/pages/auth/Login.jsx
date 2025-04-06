@@ -191,6 +191,22 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
+      // Validate admin credentials
+      if (!adminEmail || !adminPassword) {
+        setAdminError('Please enter both email and password');
+        return;
+      }
+
+      if (adminEmail.length < 5 || !adminEmail.includes('@')) {
+        setAdminError('Please enter a valid email address');
+        return;
+      }
+
+      if (adminPassword.length < 6) {
+        setAdminError('Password must be at least 6 characters');
+        return;
+      }
+      
       // Make sure we're using the form values properly
       const email = adminEmail.trim();
       const password = adminPassword.trim();
