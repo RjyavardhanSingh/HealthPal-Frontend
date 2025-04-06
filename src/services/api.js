@@ -334,10 +334,30 @@ const api = {
       }
     },
     
-    // Other auth methods...
+    login: async (email, password) => {
+      try {
+        console.log('Attempting login with credentials:', { email });
+        
+        // Make sure to send a properly formatted JSON object
+        const response = await instance.post('/auth/login', {
+          email,
+          password
+        });
+        
+        if (response.data && response.data.token) {
+          setAuthToken(response.data.token);
+          console.log('Authentication successful, token saved');
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('Authentication error:', error);
+        throw error;
+      }
+    },
+    
     register: (userData) => instance.post('/auth/register', userData),
     registerGoogle: (userData) => instance.post('/auth/register-google', userData),
-    login: (credentials) => instance.post('/auth/login', credentials),
     verifyToken: async () => {
       try {
         const response = await instance.get('/auth/verify');
@@ -354,12 +374,6 @@ const api = {
     updateNotificationSettings: (settings) => 
       instance.put('/auth/notification-settings', settings),
 
-    // Remove the first declaration of loginAdmin
-    // loginAdmin: (email, password) => {
-    //   return instance.post('/auth/admin-login', { email, password });
-    // },
-
-    // Keep only this implementation
     loginAdmin: async (email, password) => {
       try {
         console.log('Admin authentication request for:', email);
