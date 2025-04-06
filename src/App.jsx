@@ -118,7 +118,7 @@ const App = () => {
 };
 
 // Add this function to check verification status before rendering protected routes
-const DoctorRoute = ({ children }) => {
+const DoctorVerificationRoute = ({ children }) => {
   const { currentUser, isPendingVerification } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -303,9 +303,9 @@ const AppContent = () => {
 
       {/* Doctor routes with DoctorLayout */}
       <Route path="/doctor" element={
-        <DoctorRoute>
+        <DoctorVerificationRoute>
           <DoctorLayout />
-        </DoctorRoute>
+        </DoctorVerificationRoute>
       }>
         <Route index element={<DoctorDashboard />} />
         <Route path="dashboard" element={
