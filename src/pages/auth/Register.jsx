@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Particles from "react-tsparticles";
 import { loadFull } from "tsparticles";
-import { toast } from 'react-toastify';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -90,11 +89,9 @@ const Register = () => {
         throw new Error('Failed to register with Google');
       }
       
-      toast.success('Registration successful!');
       navigate('/');
     } catch (err) {
       setError('Failed to sign in with Google: ' + err.message);
-      toast.error('Google sign-in failed');
     } finally {
       setLoading(false);
     }
@@ -144,46 +141,43 @@ const Register = () => {
         imageUrl = uploadData.fileUrl;
       }
       
-      // Prepare registration data
-      const registrationData = {
+      // Create user profile data
+      const userData = {
         name,
         email,
-        firebaseUid: result.user.uid,
         role,
+        firebaseUid: result.user.uid,
+        profileImage: imageUrl,
         phone,
         dateOfBirth,
-        gender,
-        profileImage: imageUrl || ''
+        gender
       };
       
-      // Add doctor specific data if role is doctor
+      // Add doctor-specific data
       if (role === 'doctor') {
-        Object.assign(registrationData, doctorData);
+        Object.assign(userData, {
+          specialization: doctorData.specialization,
+          licenseNumber: doctorData.licenseNumber,
+          consultationFee: doctorData.consultationFee,
+          education: doctorData.education,
+          experience: doctorData.experience,
+          bio: doctorData.bio,
+          availability: doctorData.availability
+        });
       }
       
-      // Register user in our backend with Firebase UID
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(registrationData)
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to register user in backend');
-      }
+      // Register with backend
+      const registerResponse = await api.auth.register(userData);
       
       // After successful registration for doctors, show special message
       if (role === 'doctor') {
         setRegistrationSuccess(true);
       } else {
-        // For patients, navigate as usual
+        // For patients, navigate as usual - NO TOAST HERE
         navigate('/');
       }
     } catch (err) {
       setError('Failed to create account: ' + err.message);
-      toast.error('Registration failed');
     } finally {
       setLoading(false);
     }

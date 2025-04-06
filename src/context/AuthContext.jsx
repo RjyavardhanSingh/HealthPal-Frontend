@@ -67,9 +67,14 @@ export const AuthProvider = ({ children }) => {
     loadSavedAuthState();
   }, []);
 
-  // Add the signup function
+  // Update the signup function
   const signup = async (email, password) => {
     try {
+      // Suppress notifications during signup
+      if (typeof suppressNotificationsForSignup === 'function') {
+        suppressNotificationsForSignup();
+      }
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       return userCredential;
     } catch (error) {

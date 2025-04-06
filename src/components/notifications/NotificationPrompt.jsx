@@ -1,31 +1,22 @@
 import React from 'react';
 import notificationService from '../../services/notificationService';
-import { toast } from 'react-toastify';
 
 const NotificationPrompt = ({ onPermissionChange }) => {
   const requestPermission = async () => {
     try {
       const granted = await notificationService.requestPermission();
       
-      if (granted) {
-        toast.success('Notifications enabled successfully!', {
-          toastId: 'notifications-enabled' // Add unique ID
-        });
-        notificationService.setupMessageListener();
-      } else {
-        toast.warning('You need to allow notifications for medication and appointment reminders.', {
-          toastId: 'notifications-warning' // Add unique ID
-        });
-      }
-      
+      // Don't show toasts for notification permission changes
       if (onPermissionChange) {
         onPermissionChange(granted);
       }
+      
+      if (granted) {
+        notificationService.setupMessageListener();
+      }
     } catch (error) {
       console.error('Error requesting notification permission:', error);
-      toast.error('Could not enable notifications', {
-        toastId: 'notifications-error' // Add unique ID
-      });
+      // Remove toast notification on error
     }
   };
   

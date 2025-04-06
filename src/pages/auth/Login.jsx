@@ -91,6 +91,7 @@ const Login = () => {
   // Get the redirect path from location state or default to home
   const redirectPath = location.state?.from?.pathname || '/dashboard';
   
+  // Update the handleLogin function
   const handleLogin = async (e) => {
     e.preventDefault();
     
@@ -98,10 +99,13 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // Attempt login - the toast is shown in AuthContext, not here
+      // Clear any existing toasts
+      toast.dismiss();
+      
+      // Attempt login
       const response = await login(email, password);
       
-      // Handle special cases
+      // Handle cases where the account was created with social login
       if (response.useSocialLogin) {
         setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
         toast.info('Please use Google Sign-In for this account', {
@@ -110,12 +114,11 @@ const Login = () => {
         return;
       }
       
-      // If login was successful, only navigate - don't show toast here
+      // On success, navigation is handled but no additional toast is shown here
       if (response.success) {
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
         } else {
-          // Navigate based on role
           if (currentUser.role === 'doctor') {
             navigate('/doctor/dashboard');
           } else if (currentUser.role === 'admin') {
@@ -128,7 +131,6 @@ const Login = () => {
     } catch (error) {
       console.error('Login error:', error);
       
-      // Handle different types of errors
       if (error.response?.data?.message) {
         setError(error.response.data.message);
       } else if (error.message) {
