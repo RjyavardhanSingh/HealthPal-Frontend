@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Particles from "react-tsparticles";
 import { loadFull } from "tsparticles";
+import api from '../../services/api';
 
 const Register = () => {
   const [formData, setFormData] = useState({
