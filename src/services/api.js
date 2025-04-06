@@ -15,9 +15,9 @@ const instance = axios.create({
 // Token management functions
 export const setAuthToken = (token) => {
   if (token) {
-    localStorage.setItem('authToken', token);
+    localStorage.setItem('authToken', token); // Make sure localStorage key is consistent
     instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    console.log('Auth token set');
+    console.log('Auth token set successfully');
   } else {
     localStorage.removeItem('authToken');
     delete instance.defaults.headers.common['Authorization'];
@@ -344,10 +344,8 @@ const api = {
           password
         });
         
-        if (response.data && response.data.token) {
-          setAuthToken(response.data.token);
-          console.log('Authentication successful, token saved');
-        }
+        // Don't set token here - let the context handle it
+        console.log('Login response status:', response.status);
         
         return response;
       } catch (error) {

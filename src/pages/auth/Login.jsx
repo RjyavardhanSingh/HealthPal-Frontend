@@ -98,16 +98,18 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
+      console.log('Attempting login with email:', email);
       const response = await login(email, password);
       
       if (response.success) {
-        // Check if doctor with pending verification
+        // Now navigate based on user role and verification status
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
         } else {
-          // Regular login flow
           if (currentUser.role === 'doctor') {
             navigate('/doctor/dashboard');
+          } else if (currentUser.role === 'admin') {
+            navigate('/admin/dashboard');
           } else {
             navigate('/home');
           }
@@ -116,7 +118,7 @@ const Login = () => {
     } catch (error) {
       console.error('Login error:', error);
       setError(error.message || 'Failed to log in');
-      toast.error(error.message || 'Login failed');
+      toast.error(error.response?.data?.message || error.message || 'Login failed');
     } finally {
       setLoading(false);
     }

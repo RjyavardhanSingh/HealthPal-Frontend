@@ -53,10 +53,10 @@ const App = () => {
     const validateToken = async () => {
       try {
         setValidatingToken(true);
-        const token = localStorage.getItem('authToken');
-        const savedUser = localStorage.getItem('currentUser');
+        const token = localStorage.getItem('authToken'); // Use consistent key
+        const savedUserJson = localStorage.getItem('currentUser');
         
-        if (!token || !savedUser) {
+        if (!token || !savedUserJson) {
           // No token or user data, clear any partial auth state
           localStorage.removeItem('authToken');
           localStorage.removeItem('currentUser');
@@ -68,18 +68,9 @@ const App = () => {
         api.setAuthToken(token);
         
         try {
-          // Use the API service instead of raw fetch, and the proper URL from env vars
-          const response = await api.auth.verifyToken();
-          
-          if (response.data && response.data.success) {
-            console.log('Token validated successfully');
-            // Don't need to do anything - auth context will load from localStorage
-          } else {
-            console.warn('Token validation failed with response:', response);
-            // Only clear if we get an explicit invalid token response
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('currentUser');
-          }
+          // Verify token validity
+          await api.auth.verifyToken();
+          console.log('Token validated successfully');
         } catch (error) {
           console.error('Token validation error:', error);
           
@@ -88,9 +79,6 @@ const App = () => {
             console.warn('Auth error, clearing credentials');
             localStorage.removeItem('authToken');
             localStorage.removeItem('currentUser');
-          } else {
-            // For network errors or other issues, keep credentials
-            console.log('Non-auth error, preserving credentials');
           }
         }
       } finally {
