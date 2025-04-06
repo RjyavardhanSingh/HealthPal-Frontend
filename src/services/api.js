@@ -652,20 +652,20 @@ const api = {
 
   // Update or ensure the verification endpoints are properly defined in your API service
   verification: {
-    getStatus: () => instance.get('/api/verification/doctors/verification-status'),
-    uploadDocuments: (formData) => instance.post('/api/verification/doctors/verification-documents', formData, {
+    getStatus: () => instance.get('/verification/doctors/verification-status'),
+    uploadDocuments: (formData) => instance.post('/verification/doctors/verification-documents', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     }),
-    submitDocuments: (data) => instance.post('/api/verification/doctors/verification-documents', data),
+    submitDocuments: (data) => instance.post('/verification/doctors/verification-documents', data),
     
     // Admin endpoints
-    getRequests: () => instance.get('/api/verification/admin/verification-requests'),
-    getRequest: (id) => instance.get(`/api/verification/admin/verification-requests/${id}`),
-    approveRequest: (id) => instance.post(`/api/verification/admin/verification-requests/${id}/approve`),
-    rejectRequest: (id, data) => instance.post(`/api/verification/admin/verification-requests/${id}/reject`, data),
-    requestDocuments: (id, data) => instance.post(`/api/verification/admin/verification-requests/${id}/request-documents`, data)
+    getRequests: () => instance.get('/verification/admin/verification-requests'),
+    getRequest: (id) => instance.get(`/verification/admin/verification-requests/${id}`),
+    approveRequest: (id) => instance.post(`/verification/admin/verification-requests/${id}/approve`),
+    rejectRequest: (id, data) => instance.post(`/verification/admin/verification-requests/${id}/reject`, data),
+    requestDocuments: (id, data) => instance.post(`/verification/admin/verification-requests/${id}/request-documents`, data)
   },
 
   payments: {
