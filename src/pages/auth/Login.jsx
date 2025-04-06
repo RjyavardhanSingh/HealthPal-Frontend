@@ -98,26 +98,17 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // Attempt login
+      // This is where the login happens
       const response = await login(email, password);
       
-      // Handle cases where the account was created with social login
-      if (response.useSocialLogin) {
-        setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
-        // Show a more prominent message
-        toast.info('Please use Google Sign-In for this account', {
-          autoClose: 7000 // Keep it visible longer
-        });
-        return;
-      }
-      
-      // Normal login flow
+      // If login is successful, show success toast
       if (response.success) {
-        // Check verification status for doctors
+        toast.success('Login successful!');
+        
+        // Navigate based on role
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
         } else {
-          // Navigate based on role
           if (currentUser.role === 'doctor') {
             navigate('/doctor/dashboard');
           } else if (currentUser.role === 'admin') {
@@ -126,11 +117,23 @@ const Login = () => {
             navigate('/home');
           }
         }
+      } else {
+        // This handles the social login case
+        if (response.useSocialLogin) {
+          setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
+          toast.info('Please use Google Sign-In for this account', {
+            autoClose: 7000
+          });
+        } else {
+          // Handle other non-success responses
+          setError(response.message || 'Login failed');
+          toast.error('Login failed');
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
       
-      // Handle different types of errors
+      // Handle error cases
       if (error.response?.data?.message) {
         setError(error.response.data.message);
       } else if (error.message) {
