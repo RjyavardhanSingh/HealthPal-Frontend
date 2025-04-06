@@ -186,7 +186,7 @@ const Login = () => {
     }
   };
 
-  // Replace the entire handleAdminLogin function with this implementation
+  // Replace the handleAdminLogin function completely with this version
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     
@@ -194,54 +194,64 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
-      // Validate inputs
       if (!adminEmail || !adminPassword) {
         setAdminError('Please enter both email and password');
         setAdminLoading(false);
         return;
       }
       
-      // Use basic fetch instead of the API service to avoid the TypeError
+      // Create a direct XMLHttpRequest to bypass any potential issues with fetch or axios
+      const xhr = new XMLHttpRequest();
       const apiUrl = import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com';
       
-      const response = await fetch(`${apiUrl}/api/auth/admin-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: adminEmail,
-          password: adminPassword
-        })
-      });
+      xhr.open('POST', `${apiUrl}/api/auth/admin-login`, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
       
-      const data = await response.json();
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Success response
+          const data = JSON.parse(xhr.responseText);
+          
+          if (data.success && data.token && data.user) {
+            // Store auth data in localStorage
+            localStorage.setItem('authToken', data.token);
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+            
+            // Close modal and redirect
+            setShowAdminModal(false);
+            
+            // Use direct window location change to avoid any routing issues
+            window.location.href = '/admin/doctor-verification';
+          } else {
+            setAdminError('Invalid response from server');
+            setAdminLoading(false);
+          }
+        } else {
+          // Error response
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            setAdminError(errorData.message || 'Admin login failed');
+          } catch (e) {
+            setAdminError('Admin login failed');
+          }
+          setAdminLoading(false);
+        }
+      };
       
-      if (!response.ok) {
-        throw new Error(data.message || 'Admin login failed');
-      }
+      xhr.onerror = function() {
+        setAdminError('Network error occurred');
+        setAdminLoading(false);
+      };
       
-      if (data.success && data.token && data.user) {
-        // Store auth data in localStorage
-        localStorage.setItem('authToken', data.token);
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
-        
-        // Update auth context directly
-        setUserToken(data.token);
-        setCurrentUser(data.user);
-        
-        // Close the modal
-        setShowAdminModal(false);
-        
-        // Navigate to admin dashboard
-        window.location.href = '/admin/doctor-verification';
-      } else {
-        throw new Error('Invalid response from server');
-      }
+      // Send the request with stringified payload
+      xhr.send(JSON.stringify({
+        email: adminEmail,
+        password: adminPassword
+      }));
+      
     } catch (error) {
       console.error('Admin login error:', error);
       setAdminError(error.message || 'Admin login failed');
-    } finally {
       setAdminLoading(false);
     }
   };
