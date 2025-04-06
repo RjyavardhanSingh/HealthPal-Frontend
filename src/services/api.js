@@ -391,6 +391,31 @@ const api = {
   initToken,
   
   auth: {
+    login: async (email, password) => {
+      try {
+        console.log('Attempting login with credentials:', { email });
+        
+        // Send credentials to backend
+        const response = await instance.post('/auth/login', {
+          email,
+          password
+        });
+        
+        if (response.data && response.data.token) {
+          // Store token in localStorage
+          localStorage.setItem('authToken', response.data.token);
+          // Update authorization header for future requests
+          instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+          console.log('Authentication successful, token saved');
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('Authentication error:', error);
+        throw error;
+      }
+    },
+    
     authenticate: async (token, provider = 'google') => {
       try {
         console.log(`Authenticating with ${provider} token`);
@@ -436,26 +461,6 @@ const api = {
           console.error('Server responded with:', error.response.status, error.response.data);
         }
         
-        throw error;
-      }
-    },
-    
-    login: async (email, password) => {
-      try {
-        console.log('Attempting login with credentials:', { email });
-        
-        // Make sure to send a properly formatted JSON object
-        const response = await instance.post('/auth/login', {
-          email,
-          password
-        });
-        
-        // Don't set token here - let the context handle it
-        console.log('Login response status:', response.status);
-        
-        return response;
-      } catch (error) {
-        console.error('Authentication error:', error);
         throw error;
       }
     },
