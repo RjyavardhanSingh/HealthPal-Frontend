@@ -186,7 +186,7 @@ const Login = () => {
     }
   };
 
-  // Also update the handleAdminLogin function
+  // Replace the entire handleAdminLogin function with this implementation
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     
@@ -201,10 +201,10 @@ const Login = () => {
         return;
       }
       
-      console.log('Attempting admin login with:', adminEmail);
+      // Use basic fetch instead of the API service to avoid the TypeError
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com';
       
-      // Make a direct API call with fetch
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com'}/api/auth/admin-login`, {
+      const response = await fetch(`${apiUrl}/api/auth/admin-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -221,21 +221,20 @@ const Login = () => {
         throw new Error(data.message || 'Admin login failed');
       }
       
-      // Handle successful login
       if (data.success && data.token && data.user) {
-        // Store auth data
+        // Store auth data in localStorage
         localStorage.setItem('authToken', data.token);
         localStorage.setItem('currentUser', JSON.stringify(data.user));
         
-        // Update auth context
+        // Update auth context directly
         setUserToken(data.token);
         setCurrentUser(data.user);
         
-        // Close modal
+        // Close the modal
         setShowAdminModal(false);
         
-        // Navigate to admin page
-        navigate('/admin/doctor-verification');
+        // Navigate to admin dashboard
+        window.location.href = '/admin/doctor-verification';
       } else {
         throw new Error('Invalid response from server');
       }
