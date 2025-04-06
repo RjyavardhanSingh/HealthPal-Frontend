@@ -191,37 +191,58 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
+      // Simple input validation
+      if (!adminEmail || !adminPassword) {
+        setAdminError('Please enter both email and password');
+        return;
+      }
+      
       console.log('Attempting admin login with:', adminEmail);
       
-      // Call the admin login API endpoint
-      const response = await api.auth.loginAdmin(adminEmail, adminPassword);
+      // Make a direct API call instead of using the API service
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/admin-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: adminEmail,
+          password: adminPassword
+        })
+      });
       
-      if (response.data && response.data.success) {
-        // Store token and user data in localStorage
-        localStorage.setItem('authToken', response.data.token);
-        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Admin login failed');
+      }
+      
+      if (data.success && data.token && data.user) {
+        // Store token and user data
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
         
         // Set the auth token for future API requests
-        api.setAuthToken(response.data.token);
+        api.setAuthToken(data.token);
         
-        // Update the auth context
-        setUserToken(response.data.token);
-        setCurrentUser(response.data.user);
+        // Update auth context
+        setUserToken(data.token);
+        setCurrentUser(data.user);
         
-        // Close the admin modal
+        // Close modal
         setShowAdminModal(false);
         
         // Show success message
-        toast.success('Admin login successful!');
+        toast.success('Admin login successful');
         
         // Navigate to admin dashboard
         navigate('/admin/doctor-verification');
       } else {
-        throw new Error(response.data.message || 'Login failed');
+        throw new Error('Login response is missing required data');
       }
     } catch (error) {
       console.error('Admin login error:', error);
-      setAdminError(error.response?.data?.message || 'Invalid admin credentials');
+      setAdminError(error.message || 'Invalid admin credentials');
       toast.error('Admin login failed');
     } finally {
       setAdminLoading(false);

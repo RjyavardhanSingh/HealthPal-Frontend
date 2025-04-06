@@ -15,13 +15,13 @@ const instance = axios.create({
 // Token management functions
 export const setAuthToken = (token) => {
   if (token) {
-    localStorage.setItem('authToken', token); // Make sure localStorage key is consistent
+    console.log('Setting auth token');
+    localStorage.setItem('authToken', token);
     instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    console.log('Auth token set successfully');
   } else {
+    console.log('Clearing auth token');
     localStorage.removeItem('authToken');
     delete instance.defaults.headers.common['Authorization'];
-    console.log('Auth token cleared');
   }
 };
 
@@ -487,10 +487,10 @@ const api = {
       try {
         console.log('Admin authentication request for:', email);
         
-        // Make a simple POST request with email and password
+        // Ensure we're using /api prefix in the URL
         const response = await instance.post('/api/auth/admin-login', {
-          email: email,
-          password: password
+          email,
+          password
         });
         
         return response;
