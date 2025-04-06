@@ -179,7 +179,6 @@ const Register = () => {
         setRegistrationSuccess(true);
       } else {
         // For patients, navigate as usual
-        toast.success('Registration successful!');
         navigate('/');
       }
     } catch (err) {

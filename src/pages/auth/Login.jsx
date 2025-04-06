@@ -98,10 +98,10 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // Attempt login - this will show a success toast from AuthContext.jsx if successful
+      // Attempt login - the toast is shown in AuthContext, not here
       const response = await login(email, password);
       
-      // Handle social login case
+      // Handle special cases
       if (response.useSocialLogin) {
         setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
         toast.info('Please use Google Sign-In for this account', {
@@ -110,17 +110,19 @@ const Login = () => {
         return;
       }
       
-      // If we get here, login was successful and we should navigate based on role
-      if (response.pendingVerification) {
-        navigate('/doctor/pending-verification');
-      } else {
-        // Navigate based on role
-        if (currentUser.role === 'doctor') {
-          navigate('/doctor/dashboard');
-        } else if (currentUser.role === 'admin') {
-          navigate('/admin/dashboard');
+      // If login was successful, only navigate - don't show toast here
+      if (response.success) {
+        if (response.pendingVerification) {
+          navigate('/doctor/pending-verification');
         } else {
-          navigate('/home');
+          // Navigate based on role
+          if (currentUser.role === 'doctor') {
+            navigate('/doctor/dashboard');
+          } else if (currentUser.role === 'admin') {
+            navigate('/admin/dashboard');
+          } else {
+            navigate('/home');
+          }
         }
       }
     } catch (error) {
@@ -135,7 +137,7 @@ const Login = () => {
         setError('Failed to log in. Please try again.');
       }
       
-      // Only show the error toast when there's actually an error
+      // Only show error toast in the catch block
       toast.error('Login failed');
     } finally {
       setLoading(false);

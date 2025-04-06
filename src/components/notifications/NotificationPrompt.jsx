@@ -8,10 +8,14 @@ const NotificationPrompt = ({ onPermissionChange }) => {
       const granted = await notificationService.requestPermission();
       
       if (granted) {
-        toast.success('Notifications enabled successfully!');
+        toast.success('Notifications enabled successfully!', {
+          toastId: 'notifications-enabled' // Add unique ID
+        });
         notificationService.setupMessageListener();
       } else {
-        toast.warning('You need to allow notifications for medication and appointment reminders.');
+        toast.warning('You need to allow notifications for medication and appointment reminders.', {
+          toastId: 'notifications-warning' // Add unique ID
+        });
       }
       
       if (onPermissionChange) {
@@ -19,7 +23,9 @@ const NotificationPrompt = ({ onPermissionChange }) => {
       }
     } catch (error) {
       console.error('Error requesting notification permission:', error);
-      toast.error('Could not enable notifications');
+      toast.error('Could not enable notifications', {
+        toastId: 'notifications-error' // Add unique ID
+      });
     }
   };
   
