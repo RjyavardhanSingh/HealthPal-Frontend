@@ -650,20 +650,24 @@ const api = {
     }
   },
 
-  // Add this to your API service
+  // Update or ensure the verification endpoints are properly defined in your API service
   verification: {
-    getRequests: () => instance.get('/admin/verification-requests'),
-    // Change from PUT to POST to match server expectation
-    approveRequest: (requestId) => instance.post(`/admin/verification-requests/${requestId}/approve`),
-    rejectRequest: (requestId, data) => instance.post(`/admin/verification-requests/${requestId}/reject`, data),
-    requestDocuments: (requestId, data) => instance.post(`/admin/verification-requests/${requestId}/request-documents`, data),
-    getStatus: () => instance.get('/doctors/verification-status'),
-    uploadDocuments: (formData) => instance.post('/doctors/verification-documents', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    getStatus: () => instance.get('/api/verification/doctors/verification-status'),
+    uploadDocuments: (formData) => instance.post('/api/verification/doctors/verification-documents', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     }),
+    submitDocuments: (data) => instance.post('/api/verification/doctors/verification-documents', data),
+    
+    // Admin endpoints
+    getRequests: () => instance.get('/api/verification/admin/verification-requests'),
+    getRequest: (id) => instance.get(`/api/verification/admin/verification-requests/${id}`),
+    approveRequest: (id) => instance.post(`/api/verification/admin/verification-requests/${id}/approve`),
+    rejectRequest: (id, data) => instance.post(`/api/verification/admin/verification-requests/${id}/reject`, data),
+    requestDocuments: (id, data) => instance.post(`/api/verification/admin/verification-requests/${id}/request-documents`, data)
   },
 
-  // Add this to your api object
   payments: {
     createPaymentIntent: async (appointmentId) => {
       try {
