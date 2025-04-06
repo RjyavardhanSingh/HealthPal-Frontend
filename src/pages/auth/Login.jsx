@@ -110,9 +110,9 @@ const Login = () => {
         return;
       }
       
-      // Normal login flow - No toast here, it's handled in the context
+      // Normal login flow - No toast here, it's handled in the AuthContext.jsx login function
       if (response.success) {
-        // Success toast is now managed in the AuthContext.jsx login function
+        // Success toast is managed in AuthContext, don't duplicate here
         
         // Check verification status for doctors
         if (response.pendingVerification) {
@@ -147,6 +147,7 @@ const Login = () => {
     }
   };
   
+  // Update the handleGoogleSignIn function to avoid duplicate toasts
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
@@ -167,19 +168,26 @@ const Login = () => {
           displayName: response.data.user.name || result.user.displayName
         };
 
+        // Success toast is managed by login function in AuthContext
         await login(response.data.token, userData);
         
         // Navigate based on role
         if (userData.role === 'doctor') {
-          navigate('/doctor/dashboard');
+          if (userData.verificationStatus !== 'approved') {
+            navigate('/doctor/pending-verification');
+          } else {
+            navigate('/doctor/dashboard');
+          }
+        } else if (userData.role === 'admin') {
+          navigate('/admin/dashboard');
         } else {
           navigate('/home');
         }
       }
     } catch (error) {
-      console.error('Google sign-in error:', error);
-      setError('Failed to sign in with Google');
-      toast.error('Google sign-in failed');
+      console.error('Google Sign-In error:', error);
+      setError(error.message || 'Failed to sign in with Google');
+      toast.error('Google Sign-In failed');
     } finally {
       setLoading(false);
     }
