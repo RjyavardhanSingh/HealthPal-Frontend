@@ -91,7 +91,7 @@ const Login = () => {
   // Get the redirect path from location state or default to home
   const redirectPath = location.state?.from?.pathname || '/dashboard';
   
-  // Update the handleLogin function
+  // Update the handleLogin function to remove toast notifications
   const handleLogin = async (e) => {
     e.preventDefault();
     
@@ -99,22 +99,20 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // Clear any existing toasts
-      toast.dismiss();
-      
       // Attempt login
       const response = await login(email, password);
       
       // Handle cases where the account was created with social login
       if (response.useSocialLogin) {
         setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
+        // Keep this toast as it's informational, not a success/error notification
         toast.info('Please use Google Sign-In for this account', {
           autoClose: 7000
         });
         return;
       }
       
-      // On success, navigation is handled but no additional toast is shown here
+      // Normal login flow - No toast here
       if (response.success) {
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
@@ -138,15 +136,12 @@ const Login = () => {
       } else {
         setError('Failed to log in. Please try again.');
       }
-      
-      // Only show error toast in the catch block
-      toast.error('Login failed');
     } finally {
       setLoading(false);
     }
   };
   
-  // Update the handleGoogleSignIn function to avoid duplicate toasts
+  // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
@@ -167,7 +162,7 @@ const Login = () => {
           displayName: response.data.user.name || result.user.displayName
         };
 
-        // Success toast is managed by login function in AuthContext
+        // No toast notification here
         await login(response.data.token, userData);
         
         // Navigate based on role
@@ -186,13 +181,12 @@ const Login = () => {
     } catch (error) {
       console.error('Google Sign-In error:', error);
       setError(error.message || 'Failed to sign in with Google');
-      toast.error('Google Sign-In failed');
     } finally {
       setLoading(false);
     }
   };
 
-  // Update the admin login handler
+  // Also update the handleAdminLogin function
   const handleAdminLogin = async (e) => {
     e.preventDefault();
     
@@ -200,15 +194,17 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
+      // Validate inputs
       if (!adminEmail || !adminPassword) {
         setAdminError('Please enter both email and password');
+        setAdminLoading(false);
         return;
       }
       
-      // Create a simple fetch request to avoid any issues with the API service
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com';
+      console.log('Attempting admin login with:', adminEmail);
       
-      const response = await fetch(`${apiUrl}/api/auth/admin-login`, {
+      // Make a direct API call with fetch
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com'}/api/auth/admin-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -221,34 +217,31 @@ const Login = () => {
       
       const data = await response.json();
       
-      if (!data.success) {
+      if (!response.ok) {
         throw new Error(data.message || 'Admin login failed');
       }
       
-      // Store authentication data in localStorage manually
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('currentUser', JSON.stringify(data.user));
-      
-      // Set auth token for future API requests
-      if (window.location.hostname !== 'localhost') {
-        // Only log publicly visible info
-        console.log('Admin login successful - token received');
+      // Handle successful login
+      if (data.success && data.token && data.user) {
+        // Store auth data
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        
+        // Update auth context
+        setUserToken(data.token);
+        setCurrentUser(data.user);
+        
+        // Close modal
+        setShowAdminModal(false);
+        
+        // Navigate to admin page
+        navigate('/admin/doctor-verification');
       } else {
-        console.log('Admin login successful:', data.user.name);
+        throw new Error('Invalid response from server');
       }
-      
-      // Close the modal
-      setShowAdminModal(false);
-      
-      // Show success message
-      toast.success('Admin login successful');
-      
-      // Force page reload to ensure context is properly updated
-      window.location.href = '/admin/doctor-verification';
     } catch (error) {
-      console.error('Admin login error:', error.message);
-      setAdminError(error.message || 'Invalid admin credentials');
-      toast.error('Admin login failed');
+      console.error('Admin login error:', error);
+      setAdminError(error.message || 'Admin login failed');
     } finally {
       setAdminLoading(false);
     }

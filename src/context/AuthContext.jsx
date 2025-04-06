@@ -130,13 +130,6 @@ export const AuthProvider = ({ children }) => {
         
         setIsPendingVerification(isPending);
         
-        // Show success toast here
-        toast.success('Login successful!', {
-          toastId: 'login-success', // Add a unique ID to prevent duplicates
-          position: "top-right",
-          autoClose: 3000
-        });
-        
         return {
           success: true,
           pendingVerification: isPending

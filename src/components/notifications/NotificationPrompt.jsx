@@ -6,7 +6,7 @@ const NotificationPrompt = ({ onPermissionChange }) => {
     try {
       const granted = await notificationService.requestPermission();
       
-      // Don't show toasts for notification permission changes
+      // Don't show toast notifications for permission changes
       if (onPermissionChange) {
         onPermissionChange(granted);
       }
@@ -16,7 +16,7 @@ const NotificationPrompt = ({ onPermissionChange }) => {
       }
     } catch (error) {
       console.error('Error requesting notification permission:', error);
-      // Remove toast notification on error
+      // No toast notification for errors
     }
   };
   

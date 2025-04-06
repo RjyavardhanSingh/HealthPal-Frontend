@@ -96,43 +96,83 @@ instance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // If error is 401 and we haven't tried to refresh token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Only attempt to refresh token if:
+    // 1. We got a 401 (Unauthorized)
+    // 2. The request wasn't to an auth endpoint (prevent loops)
+    // 3. The request hasn't been retried already
+    // 4. We're not already refreshing a token
+    if (
+      error.response?.status === 401 &&
+      !originalRequest.url.includes('/auth/') &&
+      !originalRequest._retry &&
+      !isRefreshingToken
+    ) {
       originalRequest._retry = true;
+      isRefreshingToken = true;
       
       try {
-        console.log('401 error caught, attempting to refresh token');
+        // Check if we have a token to refresh
+        const token = localStorage.getItem('authToken');
         
-        // Get fresh token from Firebase
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          console.log('Getting fresh Firebase token');
-          const newFirebaseToken = await currentUser.getIdToken(true);
+        if (!token) {
+          throw new Error('No authentication token');
+        }
+        
+        // Try to refresh the token
+        console.log('Attempting to refresh token');
+        
+        // Here we'd typically call a refresh token endpoint
+        // For now, just check if the current token is valid
+        const response = await instance.post('/auth/verify', { token });
+        
+        if (response.data.success) {
+          console.log('Token still valid, continuing with request');
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
           
-          // Re-authenticate with backend
-          console.log('Re-authenticating with backend');
-          const response = await instance.post('/auth/authenticate', { idToken: newFirebaseToken });
-          
-          if (response.data && response.data.token) {
-            const newBackendToken = response.data.token;
-            console.log('Got new backend token');
-            
-            // Update token in localStorage and axios headers
-            setAuthToken(newBackendToken);
-            
-            // Update the original request
-            originalRequest.headers['Authorization'] = `Bearer ${newBackendToken}`;
-            
-            console.log('Retrying original request with new token');
-            return instance(originalRequest);
-          }
+          // Process any queued requests
+          processQueue(token);
+          return instance(originalRequest);
         } else {
-          console.log('No Firebase user found for token refresh');
-          clearAuthToken();
+          // Token invalid, forcing logout
+          console.log('Token invalid, forcing logout');
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('currentUser');
+          
+          // Redirect to login - NO TOAST HERE
+          window.location.href = '/login';
+          
+          // Reject all queued requests
+          processQueue(null, new Error('Session expired'));
+          return Promise.reject(new Error('Session expired'));
         }
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
+        
+        // Clear auth data
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        
+        // Process failed queue - NO TOAST HERE
+        processQueue(null, refreshError);
+        
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 100);
+        
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshingToken = false;
       }
+    }
+    
+    // If this is a 401 from an auth endpoint, don't retry
+    if (error.response?.status === 401 && (
+      originalRequest.url.includes('/auth/login') || 
+      originalRequest.url.includes('/auth/authenticate')
+    )) {
+      console.log('Auth endpoint returned 401, not retrying');
+      return Promise.reject(error);
     }
     
     return Promise.reject(error);
@@ -291,95 +331,6 @@ const processQueue = (token = null, error = null) => {
   
   failedQueue = [];
 };
-
-// Fix the response interceptor
-instance.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    
-    // Only attempt to refresh token if:
-    // 1. We got a 401 (Unauthorized)
-    // 2. The request wasn't to an auth endpoint (prevent loops)
-    // 3. The request hasn't been retried already
-    // 4. We're not already refreshing a token
-    if (
-      error.response?.status === 401 &&
-      !originalRequest.url.includes('/auth/') &&
-      !originalRequest._retry &&
-      !isRefreshingToken
-    ) {
-      originalRequest._retry = true;
-      isRefreshingToken = true;
-      
-      try {
-        // Check if we have a token to refresh
-        const token = localStorage.getItem('authToken');
-        
-        if (!token) {
-          throw new Error('No authentication token');
-        }
-        
-        // Try to refresh the token
-        console.log('Attempting to refresh token');
-        
-        // Here we'd typically call a refresh token endpoint
-        // For now, just check if the current token is valid
-        const response = await instance.post('/auth/verify', { token });
-        
-        if (response.data.success) {
-          console.log('Token still valid, continuing with request');
-          originalRequest.headers['Authorization'] = `Bearer ${token}`;
-          
-          // Process any queued requests
-          processQueue(token);
-          return instance(originalRequest);
-        } else {
-          // Token invalid, forcing logout
-          console.log('Token invalid, forcing logout');
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('currentUser');
-          
-          // Redirect to login
-          window.location.href = '/login';
-          
-          // Reject all queued requests
-          processQueue(null, new Error('Session expired'));
-          return Promise.reject(new Error('Session expired'));
-        }
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        
-        // Clear auth data
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('currentUser');
-        
-        // Process failed queue
-        processQueue(null, refreshError);
-        
-        // Redirect to login after a short delay
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 100);
-        
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshingToken = false;
-      }
-    }
-    
-    // If this is a 401 from an auth endpoint, don't retry
-    if (error.response?.status === 401 && (
-      originalRequest.url.includes('/auth/login') || 
-      originalRequest.url.includes('/auth/authenticate')
-    )) {
-      console.log('Auth endpoint returned 401, not retrying');
-      return Promise.reject(error);
-    }
-    
-    return Promise.reject(error);
-  }
-);
 
 // Complete API object with all endpoints
 const api = {
