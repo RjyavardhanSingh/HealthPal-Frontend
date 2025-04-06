@@ -191,16 +191,17 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
-      // Simple input validation
+      // Validate inputs
       if (!adminEmail || !adminPassword) {
         setAdminError('Please enter both email and password');
+        setAdminLoading(false);
         return;
       }
       
       console.log('Attempting admin login with:', adminEmail);
       
-      // Make a direct API call instead of using the API service
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/admin-login`, {
+      // Make a direct API call with fetch instead of relying on api service
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com'}/api/auth/admin-login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -217,13 +218,11 @@ const Login = () => {
         throw new Error(data.message || 'Admin login failed');
       }
       
+      // Handle successful login
       if (data.success && data.token && data.user) {
-        // Store token and user data
+        // Store auth data
         localStorage.setItem('authToken', data.token);
         localStorage.setItem('currentUser', JSON.stringify(data.user));
-        
-        // Set the auth token for future API requests
-        api.setAuthToken(data.token);
         
         // Update auth context
         setUserToken(data.token);
@@ -235,14 +234,14 @@ const Login = () => {
         // Show success message
         toast.success('Admin login successful');
         
-        // Navigate to admin dashboard
+        // Navigate to admin page
         navigate('/admin/doctor-verification');
       } else {
-        throw new Error('Login response is missing required data');
+        throw new Error('Invalid response from server');
       }
     } catch (error) {
       console.error('Admin login error:', error);
-      setAdminError(error.message || 'Invalid admin credentials');
+      setAdminError(error.message || 'Admin login failed');
       toast.error('Admin login failed');
     } finally {
       setAdminLoading(false);
