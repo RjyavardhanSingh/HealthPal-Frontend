@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
 import api from '../services/api';
+import { toast } from 'react-toastify';
 
 const AuthContext = createContext({});
 
@@ -77,7 +78,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Update the login function in AuthContext
+  // Update the login function in AuthContext to handle toast notifications
   const login = async (email, password) => {
     try {
       setAuthError(null);
@@ -123,6 +124,9 @@ export const AuthProvider = ({ children }) => {
           response.data.user.verificationStatus !== 'approved';
         
         setIsPendingVerification(isPending);
+        
+        // Show success toast here
+        toast.success('Login successful!');
         
         return {
           success: true,

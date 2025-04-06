@@ -98,17 +98,27 @@ const Login = () => {
       setError(null);
       setLoading(true);
       
-      // This is where the login happens
+      // Attempt login
       const response = await login(email, password);
       
-      // If login is successful, show success toast
+      // Handle cases where the account was created with social login
+      if (response.useSocialLogin) {
+        setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
+        toast.info('Please use Google Sign-In for this account', {
+          autoClose: 7000
+        });
+        return;
+      }
+      
+      // Normal login flow - No toast here, it's handled in the context
       if (response.success) {
-        toast.success('Login successful!');
+        // Success toast is now managed in the AuthContext.jsx login function
         
-        // Navigate based on role
+        // Check verification status for doctors
         if (response.pendingVerification) {
           navigate('/doctor/pending-verification');
         } else {
+          // Navigate based on role
           if (currentUser.role === 'doctor') {
             navigate('/doctor/dashboard');
           } else if (currentUser.role === 'admin') {
@@ -117,23 +127,11 @@ const Login = () => {
             navigate('/home');
           }
         }
-      } else {
-        // This handles the social login case
-        if (response.useSocialLogin) {
-          setError('This account was created with Google Sign-In. Please use the Google Sign-In button below.');
-          toast.info('Please use Google Sign-In for this account', {
-            autoClose: 7000
-          });
-        } else {
-          // Handle other non-success responses
-          setError(response.message || 'Login failed');
-          toast.error('Login failed');
-        }
       }
     } catch (error) {
       console.error('Login error:', error);
       
-      // Handle error cases
+      // Handle different types of errors
       if (error.response?.data?.message) {
         setError(error.response.data.message);
       } else if (error.message) {
@@ -142,6 +140,7 @@ const Login = () => {
         setError('Failed to log in. Please try again.');
       }
       
+      // This is the only place we should show a failure toast
       toast.error('Login failed');
     } finally {
       setLoading(false);
