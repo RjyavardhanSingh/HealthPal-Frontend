@@ -487,10 +487,10 @@ const api = {
       try {
         console.log('Admin authentication request for:', email);
         
-        // Make sure we're sending a proper object, not nested objects
-        const response = await instance.post('/auth/admin-login', {
-          email,
-          password
+        // Make a simple POST request with email and password
+        const response = await instance.post('/api/auth/admin-login', {
+          email: email,
+          password: password
         });
         
         return response;
