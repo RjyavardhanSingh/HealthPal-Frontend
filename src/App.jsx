@@ -41,6 +41,7 @@ import ConsultationDetails from './pages/doctor/ConsultationDetails';
 import DoctorPrescriptions from './pages/doctor/DoctorPrescriptions';
 import DoctorPrescriptionDetails from './pages/doctor/DoctorPrescriptionDetails';
 import VerificationStatus from './pages/doctor/VerificationStatus';
+import PendingVerification from './pages/doctor/PendingVerification';
 import AdminLayout from './components/layout/AdminLayout';
 import DoctorVerification from './pages/admin/DoctorVerification';
 
@@ -114,6 +115,39 @@ const App = () => {
       </ErrorBoundary>
     </Router>
   );
+};
+
+// Add this function to check verification status before rendering protected routes
+const DoctorRoute = ({ children }) => {
+  const { currentUser, isPendingVerification } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    // If this is a doctor with pending verification trying to access a protected route
+    if (currentUser?.role === 'doctor' && isPendingVerification) {
+      // But allow access to verification-related routes
+      if (
+        location.pathname !== '/doctor/verification-status' && 
+        location.pathname !== '/doctor/pending-verification'
+      ) {
+        navigate('/doctor/pending-verification');
+      }
+    }
+  }, [currentUser, isPendingVerification, location, navigate]);
+  
+  // If the doctor is verified, render the children
+  if (currentUser?.role === 'doctor' && !isPendingVerification) {
+    return children;
+  }
+  
+  // For non-doctor routes, just check authentication
+  if (currentUser && currentUser.role !== 'doctor') {
+    return children;
+  }
+  
+  // Show loading while checking
+  return <LoadingSpinner />;
 };
 
 const AppContent = () => {
@@ -274,7 +308,11 @@ const AppContent = () => {
         </DoctorRoute>
       }>
         <Route index element={<DoctorDashboard />} />
-        <Route path="dashboard" element={<DoctorDashboard />} />
+        <Route path="dashboard" element={
+          <DoctorRoute>
+            <DoctorDashboard />
+          </DoctorRoute>
+        } />
         <Route path="patients" element={<DoctorPatients />} />
         <Route path="appointments" element={<AppointmentManagement />} />
         <Route path="appointments/:id" element={<AppointmentDetails />} />
@@ -282,6 +320,7 @@ const AppContent = () => {
         <Route path="consultations/:id" element={<ConsultationDetails />} />
         <Route path="availability" element={<AvailabilityManagement />} />
         <Route path="verification-pending" element={<VerificationStatus />} />
+        <Route path="pending-verification" element={<PendingVerification />} />
         
         {/* Add these new prescription routes */}
         <Route path="prescriptions" element={<DoctorPrescriptions />} />

@@ -14,7 +14,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -91,56 +91,26 @@ const Login = () => {
   // Get the redirect path from location state or default to home
   const redirectPath = location.state?.from?.pathname || '/dashboard';
   
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     
     try {
       setError(null);
       setLoading(true);
       
-      // Special handling for admin login
-      if (email === (import.meta.env.VITE_ADMIN_EMAIL || 'admin@healthpal.com')) {
-        try {
-          // Direct admin login
-          const response = await api.auth.loginAdmin(email, password);
-          
-          if (response.data && response.data.token) {
-            // Update auth context with admin data
-            await login(response.data.token, {
-              ...response.data.user,
-              role: 'admin', // Ensure role is explicitly set
-              displayName: response.data.user.name || 'Admin'
-            });
-            
-            // Navigate to admin dashboard
-            navigate('/admin/doctor-verification');
-            return;
-          }
-        } catch (adminError) {
-          console.error('Admin login error:', adminError);
-          setError('Invalid admin credentials. Please try again.');
-          toast.error('Admin login failed');
-          setLoading(false);
-          return;
-        }
-      }
+      const response = await login(email, password);
       
-      // Regular user login flow (unchanged)
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await userCredential.user.getIdToken();
-      
-      const response = await api.auth.loginWithEmailPassword(email, idToken);
-      
-      if (response.data && response.data.token) {
-        await login(response.data.token, {
-          ...response.data.user,
-          displayName: response.data.user.name
-        });
-        
-        if (response.data.user.role === 'doctor') {
-          navigate('/doctor/dashboard');
+      if (response.success) {
+        // Check if doctor with pending verification
+        if (response.pendingVerification) {
+          navigate('/doctor/pending-verification');
         } else {
-          navigate('/home');
+          // Regular login flow
+          if (currentUser.role === 'doctor') {
+            navigate('/doctor/dashboard');
+          } else {
+            navigate('/home');
+          }
         }
       }
     } catch (error) {
@@ -393,7 +363,7 @@ const Login = () => {
                   </div>
                 </div>
 
-                <form id="login-form" className="space-y-6" onSubmit={handleSubmit}>
+                <form id="login-form" className="space-y-6" onSubmit={handleLogin}>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                       Email address

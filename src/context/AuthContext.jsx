@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPendingVerification, setIsPendingVerification] = useState(false);
 
   // Update the AuthProvider component's useEffect
   useEffect(() => {
@@ -74,32 +75,51 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Modify the login function to handle admin login more explicitly
-  const login = async (token, userData) => {
-    // Force role to be preserved exactly as passed
-    const userToStore = {
-      ...userData,
-      role: userData.role // Ensure role is explicitly set
-    };
-    
-    setUserToken(token);
-    setCurrentUser(userToStore);
-    
-    // Save to localStorage with explicit role
-    localStorage.setItem('authToken', token);
-    localStorage.setItem('currentUser', JSON.stringify(userToStore));
-    
-    // Set default auth header
-    api.setAuthToken(token);
-
-    // Return a promise that resolves after state is updated
-    return new Promise(resolve => {
-      // Use setTimeout to ensure state updates complete
-      setTimeout(() => {
-        // Don't navigate here - we'll handle navigation in the login component
-        resolve();
-      }, 50);
-    });
+  // Update the login function
+  const login = async (email, password) => {
+    try {
+      const response = await api.auth.login(email, password);
+      
+      if (response.data.success) {
+        // Check for verification status
+        if (response.data.user.role === 'doctor' && 
+            response.data.user.verificationStatus !== 'approved') {
+          // Store minimal info but mark as pending verification
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('user', JSON.stringify({
+            ...response.data.user,
+            pendingVerification: true
+          }));
+          
+          setCurrentUser({
+            ...response.data.user,
+            pendingVerification: true
+          });
+          setIsPendingVerification(true);
+          
+          return {
+            success: true,
+            pendingVerification: true
+          };
+        }
+        
+        // Normal authentication flow for approved users
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        setCurrentUser(response.data.user);
+        setIsPendingVerification(false);
+        
+        return {
+          success: true
+        };
+      } else {
+        throw new Error(response.data.message || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   };
 
   const logout = async () => {
@@ -137,6 +157,7 @@ export const AuthProvider = ({ children }) => {
     currentUser,
     userToken,
     isAuthenticated: !!userToken,
+    isPendingVerification,
     login,
     logout,
     signup,

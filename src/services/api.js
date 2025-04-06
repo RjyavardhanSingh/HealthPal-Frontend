@@ -261,6 +261,20 @@ instance.interceptors.request.use(
   }
 );
 
+// Add an interceptor to handle verification errors
+instance.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    if (error.response && error.response.status === 403 && error.response.data.pendingVerification) {
+      // Redirect to pending verification page if this is a verification error
+      window.location.href = '/doctor/pending-verification';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Complete API object with all endpoints
 const api = {
   // Include utility functions
