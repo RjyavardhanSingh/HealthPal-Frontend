@@ -110,28 +110,27 @@ const Login = () => {
         return;
       }
       
-      // Normal login flow - No toast here, it's handled in the AuthContext.jsx login function
-      if (response.success) {
-        // Success toast is managed in AuthContext, don't duplicate here
-        
-        // Check verification status for doctors
-        if (response.pendingVerification) {
-          navigate('/doctor/pending-verification');
+      // Normal login flow - success is handled in AuthContext
+      // No need to show a toast here as it's already shown in AuthContext.jsx
+      
+      // Check verification status for doctors
+      if (response.pendingVerification) {
+        navigate('/doctor/pending-verification');
+      } else {
+        // Navigate based on role
+        if (currentUser.role === 'doctor') {
+          navigate('/doctor/dashboard');
+        } else if (currentUser.role === 'admin') {
+          navigate('/admin/dashboard');
         } else {
-          // Navigate based on role
-          if (currentUser.role === 'doctor') {
-            navigate('/doctor/dashboard');
-          } else if (currentUser.role === 'admin') {
-            navigate('/admin/dashboard');
-          } else {
-            navigate('/home');
-          }
+          navigate('/home');
         }
       }
+      
     } catch (error) {
+      // This block should only run for actual errors
       console.error('Login error:', error);
       
-      // Handle different types of errors
       if (error.response?.data?.message) {
         setError(error.response.data.message);
       } else if (error.message) {
@@ -140,7 +139,7 @@ const Login = () => {
         setError('Failed to log in. Please try again.');
       }
       
-      // This is the only place we should show a failure toast
+      // Only show error toast for actual errors
       toast.error('Login failed');
     } finally {
       setLoading(false);
