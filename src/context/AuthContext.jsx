@@ -16,6 +16,8 @@ export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isPendingVerification, setIsPendingVerification] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Update the AuthProvider component's useEffect
   useEffect(() => {
@@ -78,47 +80,44 @@ export const AuthProvider = ({ children }) => {
   // Update the login function
   const login = async (email, password) => {
     try {
+      setAuthError(null);
+      setIsLoading(true);
+      
+      console.log('Attempting login with:', email);
       const response = await api.auth.login(email, password);
       
-      if (response.data.success) {
-        // Check for verification status
-        if (response.data.user.role === 'doctor' && 
-            response.data.user.verificationStatus !== 'approved') {
-          // Store minimal info but mark as pending verification
-          localStorage.setItem('token', response.data.token);
-          localStorage.setItem('user', JSON.stringify({
-            ...response.data.user,
-            pendingVerification: true
-          }));
-          
-          setCurrentUser({
-            ...response.data.user,
-            pendingVerification: true
-          });
-          setIsPendingVerification(true);
-          
-          return {
-            success: true,
-            pendingVerification: true
-          };
-        }
+      console.log('Login response:', response.data);
+      
+      if (response.data && response.data.success) {
+        // IMPORTANT FIX: Store with consistent key names
+        localStorage.setItem('authToken', response.data.token); // Use authToken not token
+        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
         
-        // Normal authentication flow for approved users
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        // Update API authorization header
+        api.setAuthToken(response.data.token);
         
+        // Update context state
+        setUserToken(response.data.token);
         setCurrentUser(response.data.user);
-        setIsPendingVerification(false);
+        
+        // Check verification status for doctors
+        const isPending = response.data.user.role === 'doctor' && 
+                          response.data.user.verificationStatus !== 'approved';
+        setIsPendingVerification(isPending);
         
         return {
-          success: true
+          success: true,
+          pendingVerification: isPending
         };
       } else {
         throw new Error(response.data.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
+      setAuthError(error.message || 'Failed to log in');
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -162,7 +161,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     signup,
     clearAuthState,
-    signInWithGoogle: () => signInWithPopup(auth, googleProvider)
+    signInWithGoogle: () => signInWithPopup(auth, googleProvider),
+    authError,
+    isLoading
   };
 
   return (
