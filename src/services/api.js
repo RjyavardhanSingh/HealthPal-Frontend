@@ -487,18 +487,11 @@ const api = {
       try {
         console.log('Admin authentication request for:', email);
         
+        // Make sure we're sending a proper object, not nested objects
         const response = await instance.post('/auth/admin-login', {
           email,
           password
         });
-        
-        if (response.data && response.data.token) {
-          console.log('Admin login successful');
-          // Store the token and set auth header
-          localStorage.setItem('authToken', response.data.token);
-          localStorage.setItem('currentUser', JSON.stringify(response.data.user));
-          instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-        }
         
         return response;
       } catch (error) {

@@ -14,7 +14,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { login, currentUser } = useAuth();
+  const { login, currentUser, setUserToken, setCurrentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -191,39 +191,41 @@ const Login = () => {
       setAdminError(null);
       setAdminLoading(true);
       
-      const email = adminEmail 
-      const password = adminPassword
+      // Make sure we're using the form values properly
+      const email = adminEmail.trim();
+      const password = adminPassword.trim();
       
       console.log('Attempting admin login with:', email);
       
+      // Call the admin login API endpoint
       const response = await api.auth.loginAdmin(email, password);
       
-      if (response.data && response.data.token) {
-        // Explicitly set role to 'admin'
-        const adminUser = {
-          ...response.data.user,
-          role: 'admin', // Force admin role
-          displayName: response.data.user.name || 'Admin'
-        };
+      if (response.data && response.data.token && response.data.user) {
+        // Store auth data in localStorage
+        localStorage.setItem('authToken', response.data.token);
+        localStorage.setItem('currentUser', JSON.stringify(response.data.user));
         
-        // Wait for login to complete
-        await login(response.data.token, adminUser);
+        // Set auth header for API requests
+        api.setAuthToken(response.data.token);
         
-        // Close modal first
+        // Update context state
+        setUserToken(response.data.token);
+        setCurrentUser(response.data.user);
+        
+        // Close modal
         setShowAdminModal(false);
         
         // Show success message
         toast.success('Admin login successful');
         
-        // Force navigation AFTER login completes
-        console.log('Navigating to admin dashboard...');
-        setTimeout(() => {
-          navigate('/admin/doctor-verification', { replace: true });
-        }, 100);
+        // Navigate to admin dashboard
+        navigate('/admin/doctor-verification', { replace: true });
+      } else {
+        throw new Error('Invalid response from server');
       }
-    } catch (adminError) {
-      console.error('Admin login error:', adminError);
-      setAdminError('Invalid admin credentials. Please try again.');
+    } catch (error) {
+      console.error('Admin login error:', error);
+      setAdminError(error.response?.data?.message || 'Invalid admin credentials. Please try again.');
       toast.error('Admin login failed');
     } finally {
       setAdminLoading(false);
