@@ -288,7 +288,7 @@ const LandingPage = () => {
                   transition={{ duration: 0.8 }}
                 >
                   <h1 className="text-4xl md:text-5xl font-bold text-blue-900 mb-6 leading-tight">
-                    Your Health Journey,<br />Simplified
+                    Your Health Journey,<br />Simplified!!!
                   </h1>
                   
                   <p className="text-lg text-gray-700 mb-8 max-w-xl">
