@@ -416,7 +416,11 @@ const api = {
       }
     },
     
-    register: (userData) => instance.post('/auth/register', userData),
+    register: (userData) => {
+      console.log('Registering user with data:', userData);
+      // Remove /api prefix since it's already in the baseURL
+      return instance.post('/auth/register', userData);
+    },
     registerGoogle: (userData) => instance.post('/auth/register-google', userData),
     verifyToken: async () => {
       try {
