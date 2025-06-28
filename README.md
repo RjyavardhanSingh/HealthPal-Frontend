@@ -1,7 +1,3 @@
-Sure! Here's the entire `README.md` content wrapped as a **single terminal-friendly block** so you can copy it all at once and paste directly into your terminal or text editor:
-
-````
-cat > README.md << 'EOF'
 # HealthPal
 
 A sample README for the **HealthPal** project. This document provides setup instructions, usage guidance, and contribution steps for the client-side application.
@@ -165,12 +161,4 @@ VITE_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 
 ---
 
-> 💡 **Tip:** Always keep secret keys secure and use `.gitignore` to prevent committing `.env` files.
-> EOF
-
-```
-
-👉 Just paste this block in your terminal to instantly generate the `README.md` file in your current directory.
-
-Let me know if you'd like me to generate the `.env` files in a similar way!
 ```
