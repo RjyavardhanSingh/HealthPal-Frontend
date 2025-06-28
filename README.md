@@ -1,7 +1,7 @@
 
 # HealthPal
 
-A sample README for the **HealthPal** project. This document provides setup instructions, usage guidance, and contribution steps for the client-side application.
+This document provides setup instructions, usage guidance, and contribution steps for the client-side application.
 
 ---
 
