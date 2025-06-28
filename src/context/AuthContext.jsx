@@ -96,15 +96,16 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('currentUser');
       api.setAuthToken(null);
       
-      // Make the login request
+      // Make the login request - get the full response
       const response = await api.auth.login(email, password);
       
       console.log('Login response status:', response.status);
+      console.log('Login response data:', response.data); // Add debug line
       
-      if (response.data.success) {
+      // Check if login was successful
+      if (response.data && response.data.success) {
         // Special case: Account created with social login
         if (response.data.useSocialLogin) {
-          // We'll return a special object to indicate social login required
           return {
             success: false,
             useSocialLogin: true,
@@ -135,7 +136,7 @@ export const AuthProvider = ({ children }) => {
           pendingVerification: isPending
         };
       } else {
-        throw new Error(response.data.message || 'Login failed');
+        throw new Error(response.data?.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);

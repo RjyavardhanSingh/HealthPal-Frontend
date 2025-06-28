@@ -202,7 +202,7 @@ const Login = () => {
       
       // Create a direct XMLHttpRequest to bypass any potential issues with fetch or axios
       const xhr = new XMLHttpRequest();
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://healthpal-api-93556f0f6346.herokuapp.com';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       
       xhr.open('POST', `${apiUrl}/api/auth/admin-login`, true);
       xhr.setRequestHeader('Content-Type', 'application/json');

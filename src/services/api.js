@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { auth } from '../config/firebase';
 
+// Add this at the top after imports
+console.log('Environment check:');
+console.log('- NODE_ENV:', import.meta.env.MODE);
+console.log('- VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('- Resolved API_URL:', import.meta.env.VITE_API_URL || 'http://localhost:5000');
+
 // Export API_URL for other files that need it
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -344,22 +350,21 @@ const api = {
   auth: {
     login: async (email, password) => {
       try {
-        console.log('Attempting login with credentials:', { email });
+        console.log('Login request for:', email);
         
-        // Send credentials to backend
         const response = await instance.post('/auth/login', {
-          email,
-          password
+          email: email,
+          password: password
         });
         
+        console.log('Login response status:', response.status);
+        console.log('Login response data:', response.data); // Add this debug line
+        
         if (response.data && response.data.token) {
-          // Store token in localStorage
-          localStorage.setItem('authToken', response.data.token);
-          // Update authorization header for future requests
-          instance.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-          console.log('Authentication successful, token saved');
+          setAuthToken(response.data.token);
         }
         
+        // Return the full response object, not just response.data
         return response;
       } catch (error) {
         console.error('Authentication error:', error);
