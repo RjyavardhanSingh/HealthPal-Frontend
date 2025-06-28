@@ -130,7 +130,6 @@ Do **not** commit actual API keys or secrets to version control. Below are examp
 ### 🧪 Create `.env.development`
 
 ```bash
-cat > .env.development << 'EOF'
 VITE_API_URL=http://localhost:5000
 VITE_NYT_API_KEY=your_nyt_api_key
 VITE_AGORA_APP_ID=your_agora_app_id
@@ -143,7 +142,6 @@ EOF
 ### 🚀 Create `.env.production`
 
 ```bash
-cat > .env.production << 'EOF'
 VITE_API_URL=https://healthpal-api.onrender.com
 VITE_NYT_API_KEY=your_nyt_api_key
 VITE_AGORA_APP_ID=your_agora_app_id
